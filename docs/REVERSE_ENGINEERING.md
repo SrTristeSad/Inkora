@@ -24,7 +24,7 @@ Referencias publicas consultadas:
 | Comportamento | Evidencia | Inkora agora | Ainda nao reproduz |
 | --- | --- | --- | --- |
 | Cabecalho "Minha Galeria", Voltar e Selecionar | Capturas oficiais citadas | Barra superior grafite e acoes reais | Medicao pixel a pixel de proporcoes/gestos |
-| Galeria vazia clara e botao + inferior | Tutorial 02 | Fundo creme, estado vazio e + funcional | Sincronizacao real |
+| Galeria vazia clara e botao + inferior | Tutorial 02 | Fundo creme e + abrindo janela Novo (Pasta, Importar PNG e tamanhos) | Sincronizacao real e importacao por navegador nativo |
 | Grade de miniaturas com titulo | Tutorial 20 | Miniaturas PNG reais do projeto, grid rolavel | Rearranjo manual livre e indice temporal |
 | Abrir miniatura e depois Editar | Tutorial 20 | Tela de detalhe, Editar entra no editor Lua/C++ | Gestos de flick e metadados de tempo de desenho |
 | Gerenciamento de obras | Acao contextual documentada no ibisPaint | Renomear sem alterar pixels, duplicar, mover para lixeira com confirmacao, restaurar ultimo item | Lixeira de 30 dias, compartilhamento online |
@@ -32,7 +32,7 @@ Referencias publicas consultadas:
 
 Comportamento de **grupos/pastas** confirmado no tutorial oficial [30. Artworks Folder Feature](https://ibispaint.com/lecture/index.jsp?no=193): ao tocar em + o aplicativo oferece Pasta no menu Novo; folders podem conter outras pastas; arrastar uma obra ate uma pasta move essa obra; arrastar obra sobre obra cria grupo; o botao Voltar serve como destino para tirar a obra da pasta; selecao multipla e icone de pasta permitem mover varias obras. Inkora agora implementa cada uma dessas interacoes por armazenamento de IDs em `gallery-folders.txt`, independente dos raster PNG; ainda nao replica drag de reordenacao entre posicoes dentro da mesma grade nem sincronizacao em nuvem.
 
-Esta eh engenharia reversa **do comportamento publicamente observavel**. O Inkora nao usa imagens, icones proprietarios ou codigo do ibisPaint e ainda nao teve validacao manual lado a lado com o binario do app.
+Esta eh engenharia reversa **do comportamento publicamente observavel**. O Inkora nao usa imagens, icones proprietarios ou codigo do ibisPaint e ainda nao teve validacao manual lado a lado com o binario do app. Esta revisao corrige a criacao de pastas SEM nome obrigatorio, comportamento de arrastar apos pressao longa, o painel de informacoes inferior, navegador hierarquico para mover varias obras e a janela Novo sobre a galeria. O ajuste Velocidade/Qualidade dimensiona presets no Inkora e nao tem equivalencia numerica calibrada com os parametros internos do ibisPaint.
 
 ## Matriz de equivalencia (ainda **nao** validada visualmente)
 
