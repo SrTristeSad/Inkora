@@ -883,7 +883,13 @@ function Startup:drawNewDialog(app,w,h)
         love.graphics.line(px+6,y+lineH-1,px+panelW-6,y+lineH-1)
         self:label(text,px+45,y+10,self.fonts.body,G.ink,panelW-60)
         love.graphics.setColor(G.ink)
-        love.graphics.rectangle("line",px+16,y+9,21,19,3)
+        if kind=="new-folder" then
+            love.graphics.rectangle("line",px+16,y+13,23,16,2)
+            love.graphics.rectangle("line",px+16,y+9,11,5,1)
+        else
+            love.graphics.rectangle("line",px+16,y+10,23,19,2)
+            love.graphics.circle("line",px+27,y+19,5)
+        end
         if enabled~=false then
             self:hit(px+6,y,panelW-12,lineH-2,kind,action)
         end
@@ -904,7 +910,6 @@ function Startup:drawNewDialog(app,w,h)
     end
     local d=self.draft
     local fieldY=py+155
-    local cx=px+panelW/2
     local fieldW=85
     local function field(label,field,x)
         self:label(label,x-22,fieldY+12,self.fonts.small,G.ink)
@@ -916,9 +921,9 @@ function Startup:drawNewDialog(app,w,h)
             modal.focus=field
         end)
     end
-    field("L","width",cx-111)
-    self:label("x",cx-11,fieldY+7,self.fonts.body,G.ink)
-    field("A","height",cx+18)
+    field("L","width",px+107)
+    self:label("x",px+214,fieldY+7,self.fonts.body,G.ink)
+    field("A","height",px+260)
     -- Each row has operative +/- controls and a proportional slider.
     local function adjust(which,amount)
         local n=tonumber(d[which]) or 1000
@@ -937,6 +942,7 @@ function Startup:drawNewDialog(app,w,h)
         love.graphics.setColor(G.white)
         love.graphics.line(left-33,sy+5,left-21,sy+5)
         love.graphics.line(right+21,sy+5,right+33,sy+5)
+        love.graphics.line(right+27,sy-1,right+27,sy+11)
         self:hit(left-40,sy-8,27,30,"new-minus-"..field,
             function()adjust(field,-64)end)
         self:hit(right+14,sy-8,27,30,"new-plus-"..field,
@@ -961,8 +967,10 @@ function Startup:drawNewDialog(app,w,h)
     end
     slider("width",py+199)
     slider("height",py+230)
-    self:label("Velocidade  ↔  Qualidade",px+36,py+251,
-        self.fonts.small,G.ink,panelW-72,"center")
+    self:label("Rapido",px+44,py+251,
+        self.fonts.small,G.ink)
+    self:label("Qualidade",px+panelW-132,py+251,
+        self.fonts.small,G.ink,89,"right")
     local qualityLeft=px+64
     local qualityRight=px+panelW-62
     love.graphics.setColor(G.line)
@@ -1486,7 +1494,7 @@ function Startup:wheel(delta)
         self.canvasScroll=clamp(self.canvasScroll-delta*42,0,
             math.max(0,#PRESETS*41+54-(love.graphics.getHeight()-
                 math.max(12,math.floor(love.graphics.getHeight()*0.043))-
-                34-278-12)))
+                34-292-12)))
         return
     end
     if self.galleryDetailKey or self.galleryModal then return end
