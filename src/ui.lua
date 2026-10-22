@@ -371,6 +371,8 @@ function UI:drawToolbar(app,w,h,right)
                 app.tool=t[2]
                 if t[2]=="brush" or t[2]=="eraser" then
                     self.tab="brush"
+                elseif t[2]=="fill" then
+                    self.tab="settings"
                 end
             end)
         end
@@ -534,6 +536,48 @@ function UI:drawSwatches(app,x,y,w)
             self.hue,self.saturation,self.brightness=rgbHsv(swatch)
         end)
     end
+end
+
+-- Tool-contextual controls: the bucket shares the Settings tab but not
+-- brush parameters. Every visible control changes the actual fill operation.
+function UI:drawFillSettings(app,x,w,h)
+    self:print("BALDE DE TINTA",x,155,C.white)
+    self:print("Preenchimento contiguo - motor C++ v13",
+        x,181,C.muted,self.small,w)
+    self:rect(x+4,218,w-8,125,C.surface,12)
+    self:print("Tolerancia de cor",x+14,233,C.white)
+    self:slider(x+17,276,w-36,app.fillTolerance,
+        "Similaridade com pixel inicial",function(v)
+            app.fillTolerance=math.floor(v*100+0.5)/100
+        end,tostring(math.floor(app.fillTolerance*100+0.5)).."%")
+    local presets={{"Exata",0},{"Media",0.10},{"Ampla",0.25}}
+    local cell=(w-16)/3
+    for i,p in ipairs(presets) do
+        self:button(x+4+(i-1)*(cell+4),365,cell,32,p[1],function()
+            app.fillTolerance=p[2]
+        end,math.abs(app.fillTolerance-p[2])<0.005 and "primary" or "ghost")
+    end
+    self:print("O balde troca uma regiao conectada da camada",
+        x+7,423,C.white,self.small,w-14)
+    self:print("ativa. A tolerancia compara RGB e transparencia.",
+        x+7,444,C.muted,self.small,w-14)
+    local sel=app.doc.selection
+    self:rect(x+4,478,w-8,98,C.surface,11)
+    self:print(sel and "Selecao: ativa" or "Selecao: nenhuma",
+        x+14,488,C.white,self.small,w-28)
+    self:button(x+12,516,w-24,34,"Limpar selecao (Ctrl+D)",function()
+        app.doc:clearSelection()
+    end,"ghost")
+    local locked=app.doc.layers[app.doc.selected].alphaLock
+    self:button(x+5,595,w-10,39,
+        locked and "Alpha Lock: ATIVO" or "Alpha Lock: DESATIVADO",
+        function()
+            app.doc:setLayerAlphaLock(app.doc.selected,not locked)
+        end,locked and "primary" or "ghost")
+    self:print("Alpha Lock preserva a transparencia original.",
+        x+6,649,C.muted,self.small,w-12)
+    self:print("COR DE PREENCHIMENTO",x+6,h-139,C.muted,self.small)
+    self:drawSwatches(app,x,h-113,w)
 end
 
 function UI:drawSettings(app,x,w,h)
@@ -988,7 +1032,9 @@ function UI:draw(app)
     end
     self.currentDoc=app.doc
     if self.tab=="brush" then self:drawBrushPanel(app,px,panelWidth,h)
-    elseif self.tab=="settings" then self:drawSettings(app,px,panelWidth,h)
+    elseif self.tab=="settings" then
+        if app.tool=="fill" then self:drawFillSettings(app,px,panelWidth,h)
+        else self:drawSettings(app,px,panelWidth,h) end
     elseif self.tab=="layers" then self:drawLayersPanel(app,px,panelWidth,h)
     elseif self.tab=="texture" then self:drawTexturePanel(app,px,panelWidth,h)
     elseif self.tab=="wet" then self:drawWetPanel(app,px,panelWidth,h)

@@ -460,7 +460,7 @@ function love.load()
         if not ok then app:statusMessage("Erro na ponta salva: "..tostring(err)) end
     end
     if Brush.nativeAvailable() then
-        app:statusMessage("Motor C++ v8 ativo | LuaJIT FFI | Inkora")
+        app:statusMessage("Motor C++ v13 ativo | LuaJIT FFI | Inkora")
     else
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end
@@ -468,11 +468,16 @@ function love.load()
     if preview=="brush" or preview=="layers" or preview=="color"
         or preview=="rotate" or preview=="settings"
         or preview=="stabilization" or preview=="direction"
-        or preview=="texture" or preview=="wet" then
+        or preview=="texture" or preview=="wet" or preview=="fill" then
         if preview=="direction" then
             require("tests.preview").directional(app)
         else require("tests.preview").seed(app) end
-        if preview=="rotate" then
+        if preview=="fill" then
+            app.tool="fill"
+            app.fillTolerance=0.12
+            app.ui.tab="settings"
+            app:statusMessage("Inkora: balde nativo C++ v13 - tolerancia ajustavel")
+        elseif preview=="rotate" then
             local l,t,r,b=workspace()
             app:rotateAt(28,(l+r)/2,(t+b)/2)
             app.ui.tab="brush"
