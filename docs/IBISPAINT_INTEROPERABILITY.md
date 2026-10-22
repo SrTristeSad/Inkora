@@ -1,6 +1,6 @@
 # Interoperabilidade com ibisPaint — evidências e licenças
 
-> Escopo atual: leitura **experimental e somente de importação** de uma imagem composta extraída de um arquivo `.ipv`, dentro do Inkora. Não implica compatibilidade de camadas, textos, histórico ou escrita do formato.
+> Escopo atual: importacao **experimental de imagem composta e camadas raster RPNG reconhecidas**. Nao implica fidelidade de ordem de camadas, modos de mistura, visibilidade, texto, historico ou escrita do formato.
 
 ## Auditoria de projetos públicos (22/10/2026)
 
@@ -18,17 +18,19 @@ A ausência de `LICENSE` **não** concede licença de reutilização. A referên
 - `src/ibis_ipv.lua`: leitor independente baseado **somente na especificação publicada** em [FORMAT.md](https://github.com/fapotaa/ipv-format/blob/main/docs/FORMAT.md), sem linhas de código copiadas das implementações externas;
 - cabeçalhos e números em big-endian, validação de limites e da sentinela negativa dos registros;
 - identifica a imagem composta PNG mais recente e valida suas dimensões;
-- **não** decodifica `RPNG`, não recria camadas do ibisPaint, não edita textos nem exporta `.ipv`;
+- decodifica os retangulos raster `RPNG` conhecidos, cobertura em `u16` (skip/run) e linhas invertidas; cada retangulo vira uma camada nativa Inkora independente;
+- preserva a imagem composta original numa camada de referencia **oculta** para verificacao; a ordenacao atual dos raster e por ID (estimada), sem fidelidade comprovada ao indice de camadas original;
+- **nao** decodifica registros de ordem/visibilidade/blend do ibisPaint, texto editavel, operacoes do historico nem exporta `.ipv`;
 - arquivos truncados, sentinelas inválidas, formatos e snapshots ausentes são rejeitados;
-- arrastar um arquivo `.ipv` para a janela cria um **novo projeto INKORA1** com a imagem composta numa camada editável, mantendo o arquivo de origem inalterado;
+- arrastar um arquivo `.ipv` cria um **novo projeto INKORA1**. Quando todas as camadas RPNG reconhecidas passam na validacao, cria camadas raster editaveis e referencia composta oculta; caso contrario, importa apenas a imagem composta e informa o motivo. O arquivo de origem nunca e modificado;
 - limite de entrada de 256 MiB, limite da imagem composta de 64 MiB e limite de resolução editável do Inkora de 4096 × 4096 pixels;
 - testes puros Lua com registros sintéticos e teste GPU com PNG verdadeiro + rejeição de corrupção.
 
 ### Compatibilidade comprovada e pendente
 
-**Comprovado pelos testes locais/CI** (quando verdes): leitura de **arquivos IPV sintéticos** contendo os tipos documentados e importação da imagem PNG reconstruída como projeto Inkora. Isso **não comprova** abertura de documentos reais do ibisPaint: ainda faltam amostras autorizadas de versões reais (principalmente **Windows 14.1.2**) e casos com sessões repetidas.
+**Comprovado pelos testes locais/CI** (quando verdes): leitura de **arquivos IPV sintéticos** contendo os tipos documentados, importacao da imagem PNG e testes RPNG sinteticos com 2x2 pixels, mascara esparsa, inversao de coordenadas Y, reabertura de camadas e fallback quando mascaras sao invalidas. Isso **não comprova** abertura de documentos reais do ibisPaint: ainda faltam amostras autorizadas de versões reais (principalmente **Windows 14.1.2**) e casos com sessões repetidas.
 
-**Próxima etapa**: montar fixtures reais com obras próprias, confirmar se a última imagem composta sempre está disponível, documentar variações e experimentar importação das camadas raster `RPNG` em memória e testes pixel a pixel. Só depois avaliar exportador IPV; editar snapshots sem reconstruir a cadeia de histórico pode gerar arquivos que o ibisPaint considere corrompidos.
+**Próxima etapa**: coletar fixtures IPV reais criadas pelo proprio usuario no ibisPaint, medir resultados pixel a pixel, decodificar registros da lista de camadas/ordem/visibilidade, e definir fidelidade a misturas/opacidade antes de afirmar importacao nativa fiel. Depois estudar IPBZ. Editar snapshots sem reconstruir a cadeia do historico pode gerar arquivos que o ibisPaint considere corrompidos.
 
 ### Política de integração
 
