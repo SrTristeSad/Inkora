@@ -467,7 +467,7 @@ local function run(app)
             "Mudanca estrutural nao regenerou tiles sem buffer completo")
         -- Brush undo history captures only tiles intersected by the
         -- actual stroke (including eraser / alpha at block boundaries).
-        local undoDoc=Doc.new(384,256,"Historico regional de pincel")
+        local undoDoc=Doc.new(384,384,"Historico regional de pincel")
         local layerCanvas=undoDoc.layers[1].canvas
         local saveBefore=layerCanvas:newImageData()
         assert(undoDoc:beginStrokeHistory())
@@ -485,7 +485,7 @@ local function run(app)
             and memory.fullCount==0 and memory.tiles==6,
             "Uma pincelada cruzando tiles deve salvar 6 tiles apenas")
         assert(memory.bytes==6*128*128*4 and
-            memory.bytes<384*256*4,
+            memory.bytes<384*384*4,
             "Historico de pincel salvou mais que uma camada inteira")
         local saveAfter=layerCanvas:newImageData()
         assert(undoDoc:undo(),"Desfazer regionais falhou")
@@ -505,7 +505,7 @@ local function run(app)
             undoDoc:historyStats().fullCount==0)
         assert(undoDoc:redo(),"Refazer regional falhou")
         local redoImage=undoDoc.layers[1].canvas:newImageData()
-        for y=0,255,13 do for x=0,383,11 do
+        for y=0,383,13 do for x=0,383,11 do
             local a,b,c,d=redoImage:getPixel(x,y)
             local e,f,g,h=saveAfter:getPixel(x,y)
             assert(math.abs(a-e)<0.005 and math.abs(b-f)<0.005
