@@ -1623,6 +1623,82 @@ local function run(app)
     assert(app:returnToGallery())
     print("INKORA_IPV_FLATTENED_IMPORT_AND_CORRUPTION_REJECTED_GPU_OK")
 
+    -- The RPNG mask is sparse and bottom-up. A three-pixel 2x2 dirty
+    -- rectangle at (10, screen y=42) should map exactly as follows:
+    -- top row: green, blue; bottom row: red, transparent.
+    local packed=love.image.newImageData(16,1)
+    packed:setPixel(0,0,1,0,0,1)
+    packed:setPixel(1,0,0,1,0,1)
+    packed:setPixel(2,0,0,0,1,1)
+    local packedPNG=packed:encode("png"):getString()
+    local spans=be16(0)..be16(1)..be16(1)..be16(2)
+    local rpng="RPNG"..be32(45)..be32(0)..
+        be32(1)..be32(1)..string.char(0)..
+        be32(2)..be32(2)..be32(10)..be32(20)..
+        be32(16)..be32(1)..be32(13)..be32(0)..
+        be32(#spans)..spans..be32(#packedPNG)..packedPNG
+    local raster=record(0x100,0x500,
+        string.rep("\0",8)..be32(7)..be32(1)..
+        be16(0)..be32(#rpng)..rpng)
+    local rpngBytes=head..raster..snap
+    local rasterIPV={
+        getFilename=function()return "C:"..string.char(92).."camadas.ipv" end,
+        getSize=function()return #rpngBytes end,
+        open=function()end,
+        read=function()return rpngBytes end,
+        close=function()end,
+    }
+    local loaded=app:importGalleryIPV(rasterIPV)
+    assert(loaded and app.doc.name=="camadas",
+        "Projeto IPV RPNG nao importou")
+    assert(#app.doc.layers==2,
+        "Uma camada raster deve coexistir com referencia composta oculta")
+    assert(not app.doc.layers[1].visible and app.doc.layers[2].visible,
+        "Referencia deve ficar oculta e camada RPNG editavel")
+    local native=app.doc.layers[2].canvas
+    local function pixelAt(x,y)
+        return {native:newImageData(1,1,x,y,1,1):getPixel(0,0)}
+    end
+    local red=pixelAt(10,43)
+    local green=pixelAt(10,42)
+    local blue=pixelAt(11,42)
+    local clear=pixelAt(11,43)
+    assert(red[1]>0.9 and red[2]<0.1 and red[4]>0.95,
+        "Pixel vermelho RPNG saiu da linha de baixo")
+    assert(green[2]>0.9 and green[1]<0.1 and green[4]>0.95,
+        "Pixel verde RPNG saiu da linha de cima")
+    assert(blue[3]>0.9 and blue[1]<0.1 and blue[4]>0.95,
+        "Pixel azul RPNG foi invertido")
+    assert(clear[4]<0.05,"Mascara RPNG perdeu o buraco transparente")
+    local importedKey=app.doc.projectKey
+    assert(app:returnToGallery())
+    local restored=savedDoc.load(importedKey)
+    assert(#restored.layers==2 and not restored.layers[1].visible)
+    local persisted=restored.layers[2].canvas:
+        newImageData(1,1,10,42,1,1)
+    local _,greenValue= persisted:getPixel(0,0)
+    assert(greenValue>0.9,"Camada raster nao sobreviveu ao salvamento")
+    print("INKORA_IPV_SPARSE_RPNG_BOTTOM_UP_IMPORT_GPU_OK")
+
+    -- An invalid span table must not become a fake raster layer. It is
+    -- acceptable to fall back to the proven flattened composite instead.
+    local broken=rpng:sub(1,58)..be16(6)..rpng:sub(61)
+    local badRaster=record(0x100,0x500,
+        string.rep("\0",8)..be32(7)..be32(1)..
+        be16(0)..be32(#broken)..broken)
+    local fallbackBytes=head..badRaster..snap
+    local fallbackIPV={
+        getFilename=rasterIPV.getFilename,
+        getSize=function()return #fallbackBytes end,
+        open=function()end,read=function()return fallbackBytes end,
+        close=function()end,
+    }
+    assert(app:importGalleryIPV(fallbackIPV))
+    assert(#app.doc.layers==2 and app.doc.layers[1].visible,
+        "RPNG invalido deveria usar apenas composicao achatada")
+    assert(app:returnToGallery())
+    print("INKORA_IPV_BAD_RPNG_SAFE_FLATTENED_FALLBACK_GPU_OK")
+
     -- Folder information must be a bottom sheet with editable title.
     assert(app.startup:galleryOpenFolder(group))
     assert(app.startup:galleryFolderInfo())
