@@ -1640,6 +1640,58 @@ local function run(app)
     local raster=record(0x100,0x500,
         string.rep("\0",8)..be32(7)..be32(1)..
         be16(0)..be32(#rpng)..rpng)
+    -- IPV appends 0300/0600 layer-list operations; the second ID group
+    -- is the active "after" set, not the old IDs or a numeric ID sort.
+    -- These are SYNTHETIC fixtures; Windows 14.1.2 remains unverified.
+    local function groupOfIds(ids)
+        local chunks={}
+        for _,id in ipairs(ids) do
+            chunks[#chunks+1]=record(0x0300,0x0603,be32(id))
+        end
+        chunks[#chunks+1]=record(0x0300,0x0603,be32(0xffffffff))
+        return be32(#chunks)..table.concat(chunks)
+    end
+    local rasterSecond=record(0x100,0x500,
+        string.rep("\0",8)..be32(2)..be32(1)..
+        be16(0)..be32(#rpng)..rpng)
+    local layerOrder=record(0x0300,0x0600,
+        string.rep("\0",12)..groupOfIds({7,2})..
+        groupOfIds({2,7})..be32(0))
+    local IPVReader=require("src.ibis_ipv")
+    local orderedInfo=IPVReader.inspect(
+        head..raster..rasterSecond..layerOrder..snap)
+    assert(orderedInfo.layerOrderSource=="layer-list" and
+        #orderedInfo.rasterLayers==2 and
+        orderedInfo.rasterLayers[1].id==2 and
+        orderedInfo.rasterLayers[2].id==7 and
+        not orderedInfo.incompleteRaster,
+        "A ultima lista IPV nao ordenou as camadas ativas")
+    local deletion=record(0x0300,0x0600,
+        string.rep("\0",12)..groupOfIds({2,7})..
+        groupOfIds({7})..be32(0))
+    local afterDelete=IPVReader.inspect(
+        head..raster..rasterSecond..layerOrder..deletion..snap)
+    assert(#afterDelete.rasterLayers==1 and
+        afterDelete.rasterLayers[1].id==7 and
+        not afterDelete.incompleteRaster,
+        "Camada removida foi ressuscitada por snapshot antigo")
+    local missingActive=record(0x0300,0x0600,
+        string.rep("\0",12)..groupOfIds({7})..
+        groupOfIds({7,9})..be32(0))
+    local missingInfo=IPVReader.inspect(
+        head..raster..missingActive..snap)
+    assert(missingInfo.incompleteRaster,
+        "Lista de camada sem snapshot deveria ativar fallback achatado")
+    local unknownList=record(0x0300,0x0600,
+        string.rep("\0",12)..be32(1000)..string.rep("\0",8))
+    local fallbackOrder=IPVReader.inspect(
+        head..raster..rasterSecond..unknownList..snap)
+    assert(fallbackOrder.layerOrderSource=="id-estimate" and
+        #fallbackOrder.rasterLayers==2 and
+        fallbackOrder.rasterLayers[1].id==2,
+        "Registro de ordem desconhecido deveria preservar fallback")
+    print("INKORA_IPV_LAYER_LIST_ORDER_AND_DELETION_SYNTHETIC_OK")
+
     local rpngBytes=head..raster..snap
     local rasterIPV={
         getFilename=function()return "C:"..string.char(92).."camadas.ipv" end,
