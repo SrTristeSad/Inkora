@@ -790,17 +790,19 @@ local function splitTabs(line)
     return fields
 end
 
-function Document.listProjects()
-    if not love.filesystem.getInfo("projects", "directory") then return {} end
+function Document.listProjects(base)
+    base=base or "projects"
+    if base~="projects" and base~="deleted" then error("Pasta invalida") end
+    if not love.filesystem.getInfo(base, "directory") then return {} end
     local projects = {}
-    for _, key in ipairs(love.filesystem.getDirectoryItems("projects")) do
+    for _, key in ipairs(love.filesystem.getDirectoryItems(base)) do
         if key:match("^[%w%-]+$") then
-            local s = love.filesystem.read("projects/" .. key .. "/manifest.txt")
+            local s = love.filesystem.read(base .. "/" .. key .. "/manifest.txt")
             if s and s:match("^INKORA1\n") then
                 local name = s:match("\nname\t([^\r\n]+)") or key
                 local width,height=s:match("\nsize\t(%d+)\t(%d+)")
-                local picture="projects/"..key.."/preview.png"
-                local info=love.filesystem.getInfo("projects/"..key.."/manifest.txt")
+                local picture=base.."/"..key.."/preview.png"
+                local info=love.filesystem.getInfo(base.."/"..key.."/manifest.txt")
                 projects[#projects + 1] = {
                     key=key,name=name,width=tonumber(width),height=tonumber(height),
                     preview=love.filesystem.getInfo(picture,"file") and picture or nil,
@@ -814,6 +816,107 @@ function Document.listProjects()
         return a.key>b.key
     end)
     return projects
+end
+
+-- Gallery metadata and project management are intentionally filesystem-only.
+-- A rename never opens or resaves layer PNGs, avoiding accidental raster loss.
+local function projectKeyOK(key)
+    return type(key)=="string" and key~="" and key:match("^[%w%-]+$")~=nil
+end
+
+local function folderFiles(root)
+    local files={}
+    for _,name in ipairs(love.filesystem.getDirectoryItems(root)) do
+        if not name:match("^[%w%-_.]+$") or
+            not love.filesystem.getInfo(root.."/"..name,"file") then
+            error("Arquivo inesperado em projeto: "..name)
+        end
+        files[#files+1]=name
+    end
+    table.sort(files)
+    return files
+end
+
+local function copyProject(src,dst,manifestOverride)
+    assert(love.filesystem.getInfo(src.."/manifest.txt","file"),"Projeto inexistente")
+    assert(not love.filesystem.getInfo(dst),"Destino ja existe")
+    local files=folderFiles(src)
+    assert(love.filesystem.createDirectory(dst),"Nao foi possivel criar pasta")
+    -- Write manifest last so partial copies never become gallery entries.
+    for _,name in ipairs(files) do
+        if name~="manifest.txt" then
+            local data=assert(love.filesystem.read(src.."/"..name))
+            assert(love.filesystem.write(dst.."/"..name,data),"Erro copiando "..name)
+        end
+    end
+    local manifest=manifestOverride or assert(love.filesystem.read(src.."/manifest.txt"))
+    assert(love.filesystem.write(dst.."/manifest.txt",manifest),"Erro copiando manifesto")
+end
+
+local function newProjectKey()
+    for i=1,30 do
+        local key=os.date("%Y%m%d-%H%M%S").."-"..
+            tostring(love.math.random(100000,999999))
+        if not love.filesystem.getInfo("projects/"..key) and
+            not love.filesystem.getInfo("deleted/"..key) then return key end
+    end
+    error("Nao foi possivel criar identificador unico")
+end
+
+function Document.renameProject(key,newName)
+    assert(projectKeyOK(key),"Projeto invalido")
+    local name=cleanText(newName)
+    assert(name~="","Nome vazio")
+    local path="projects/"..key.."/manifest.txt"
+    local manifest=assert(love.filesystem.read(path),"Projeto inexistente")
+    assert(manifest:match("^INKORA1\n"),"Manifesto invalido")
+    local updated,n=manifest:gsub("(\nname\t)[^\r\n]*","%1"..name,1)
+    assert(n==1,"Nome do projeto ausente")
+    assert(love.filesystem.write(path,updated),"Erro salvando nome")
+    return name
+end
+
+function Document.duplicateProject(key)
+    assert(projectKeyOK(key),"Projeto invalido")
+    local root="projects/"..key
+    local manifest=assert(love.filesystem.read(root.."/manifest.txt"))
+    assert(manifest:match("^INKORA1\n"),"Manifesto invalido")
+    local name=cleanText((manifest:match("\nname\t([^\r\n]*)") or "Desenho").." (copia)")
+    local changed,n=manifest:gsub("(\nname\t)[^\r\n]*","%1"..name,1)
+    assert(n==1,"Nome do projeto ausente")
+    local newKey=newProjectKey()
+    copyProject(root,"projects/"..newKey,changed)
+    return newKey
+end
+
+-- Move artwork to a reversible local trash directory. Only original files
+-- are removed AFTER the complete destination copy is written and checked.
+function Document.trashProject(key)
+    assert(projectKeyOK(key),"Projeto invalido")
+    local src="projects/"..key
+    local dst="deleted/"..key
+    assert(love.filesystem.createDirectory("deleted"))
+    copyProject(src,dst)
+    for _,name in ipairs(folderFiles(src)) do
+        assert(love.filesystem.remove(src.."/"..name),"Nao foi possivel mover "..name)
+    end
+    assert(love.filesystem.remove(src),"Nao foi possivel remover pasta")
+    return true
+end
+
+function Document.restoreProject(key)
+    assert(projectKeyOK(key),"Projeto invalido")
+    local src="deleted/"..key
+    local target=love.filesystem.getInfo("projects/"..key) and
+        newProjectKey() or key
+    local dst="projects/"..target
+    assert(love.filesystem.createDirectory("projects"))
+    copyProject(src,dst)
+    for _,name in ipairs(folderFiles(src)) do
+        assert(love.filesystem.remove(src.."/"..name),"Erro restaurando "..name)
+    end
+    assert(love.filesystem.remove(src),"Erro removendo pasta antiga")
+    return target
 end
 
 function Document.load(key)
