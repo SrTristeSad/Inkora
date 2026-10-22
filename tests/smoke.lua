@@ -144,8 +144,8 @@ end
 local w,h=vp.bounds(1280,800,math.pi/2)
 assert(near(w,800) and near(h,1280),"BBox de canvas rotacionado incorreto")
 local presets=require("src.presets")
-assert(#presets==8 and presets.find("ink").tip==0 and
-    presets.find("marker").tip==1)
+assert(#presets==9 and presets.find("ink").tip==0 and
+    presets.find("marker").tip==1 and presets.find("watercolor").wetness>0.7)
 print("INKORA_VIEWPORT_PRESETS_OK")
 
 print("Inkora: tests de modulos OK")

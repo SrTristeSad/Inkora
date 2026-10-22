@@ -138,6 +138,20 @@ INKORA_API int32_t inkora_core_stroke_v9(
     float pressure_opacity, const InkoraPaintClip *clip,
     InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics);
 
+// ABI v10: optional local wet-pigment mixing. Wetness and pigment load
+// are normalized [0,1]; zero wetness produces the exact ABI v9 result.
+// Mixing samples the existing RGBA8 pixel on the *same* source layer.
+typedef struct InkoraWetPaint {
+    float wetness, pigment_load;
+} InkoraWetPaint;
+
+INKORA_API int32_t inkora_core_stroke_v10(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow,
+    float pressure_opacity, const InkoraPaintClip *clip,
+    InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics,
+    const InkoraWetPaint *wet);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

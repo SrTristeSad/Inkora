@@ -21,6 +21,11 @@ local Presets={
     {id="paint",name="Pincel macio",family="Pintura",size=21,hardness=0.3,
      spacing=0.09,opacity=0.75,flow=0.55,stabilization=0.30,tip=0,
      pressureOpacity=0.6,preview="paint"},
+    {id="watercolor",name="Aquarela",family="Pintura",size=36,
+     hardness=0.35,spacing=0.08,opacity=0.68,flow=0.40,
+     stabilization=0.22,tip=0,pressureOpacity=0.72,
+     wetness=0.78,pigmentLoad=0.38,
+     preview="paint"},
     {id="pixel",name="Pixel",family="Precisao",size=3,hardness=1,
      spacing=0.1,opacity=1,flow=1,stabilization=0,tip=0,
      pressureOpacity=0,preview="pixel"},
@@ -36,6 +41,8 @@ for _,preset in ipairs(Presets) do
     if preset.texture==nil then preset.texture=0 end
     if preset.scatter==nil then preset.scatter=0 end
     if preset.sizeJitter==nil then preset.sizeJitter=0 end
+    if preset.wetness==nil then preset.wetness=0 end
+    if preset.pigmentLoad==nil then preset.pigmentLoad=1 end
 end
 
 function Presets.find(id)

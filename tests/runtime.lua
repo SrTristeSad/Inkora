@@ -655,6 +655,58 @@ local function run(app)
             app.brushSizeJitter==0,"Reset nao restaurou pincel padrao")
         UI.tab="brush"
         love.draw()
+        -- True wet color blending on existing paint, preview comparison,
+        -- editable presets, and normal brush retention.
+        assert(app:choosePreset("watercolor"))
+        assert(app.brushWetness>0.5 and app.brushPigmentLoad<0.5)
+        local priorColor=app.color
+        app.color={0.95,0.92,0.12}
+        UI.tab="wet"
+        love.draw()
+        local BrushPreview=require("src.brush_preview")
+        local beforeWet=BrushPreview.getLive(app,true)
+        local dryComparison=BrushPreview.getDryComparison(app)
+        assert(beforeWet and dryComparison and beforeWet~=dryComparison,
+            "Comparacao de tinta nao criou duas imagens C++")
+        local beforePixels=beforeWet:newImageData()
+        local dryPixels=dryComparison:newImageData()
+        local diff=0
+        for y=7,36,3 do for x=10,156,3 do
+            local r1,g1,b1=beforePixels:getPixel(x,y)
+            local r2,g2,b2=dryPixels:getPixel(x,y)
+            diff=diff+math.abs(r1-r2)+math.abs(g1-g2)+math.abs(b1-b2)
+        end end
+        assert(diff>3,"Tinta umida e seca produziram as mesmas cores")
+        assert(UI:click(px+214,275),"Slider de umidade nao clicavel")
+        UI:mousereleased()
+        assert(app.brushWetness>0.60)
+        assert(UI:click(px+60,372),"Slider de carga nao clicavel")
+        UI:mousereleased()
+        assert(app.brushPigmentLoad<0.40)
+        local afterWet=BrushPreview.getLive(app,true)
+        assert(afterWet~=beforeWet,"Umidade nao renovou a previa")
+        love.draw()
+        assert(UI:click(px+41,734),"Salvar tinta umida nao clicavel")
+        local wetProfile=require("src.brush_profiles").read().watercolor
+        assert(wetProfile and wetProfile.wetness>0.6 and
+            wetProfile.pigmentLoad<0.4,"Config de pigmento nao foi salva")
+        assert(app:choosePreset("ink"))
+        assert(app.brushWetness==0 and app.brushPigmentLoad==1,
+            "Pincel seco foi afetado pelos controles de tinta")
+        assert(app:choosePreset("watercolor"))
+        assert(app.brushWetness>0.6 and app.brushPigmentLoad<0.4,
+            "Configuracao de tinta umida nao foi restaurada")
+        UI.tab="wet"
+        love.draw()
+        assert(UI:click(px+200,734),"Restaurar tinta nao clicavel")
+        assert(math.abs(app.brushWetness-0.78)<0.001 and
+            math.abs(app.brushPigmentLoad-0.38)<0.001,
+            "Restaurar nao recuperou o preset Aquarela")
+        app.color=priorColor
+        UI.tab="brush"
+        love.draw()
+        print("INKORA_WET_PAINT_PREVIEW_PROFILES_OK")
+
         print("INKORA_TEXTURE_EDITABLE_PREVIEW_GPU_OK")
         print("INKORA_NATIVE_BRUSH_PREVIEWS_OK")
 

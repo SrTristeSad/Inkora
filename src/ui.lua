@@ -667,6 +667,49 @@ function UI:drawTexturePanel(app,x,w,h)
     end
 end
 
+function UI:drawWetPanel(app,x,w,h)
+    self:print("TINTA UMIDA",x,155,C.white)
+    self:print("Mistura com as cores da propria camada",x,181,C.muted,self.small,w)
+    self:print("C++ v10 - pigmentos e transparencias",x,204,C.muted,self.small,w)
+    self:slider(x+12,275,w-24,app.brushWetness,"Umidade",function(v)
+        app.brushWetness=v
+    end,tostring(math.floor(app.brushWetness*100+0.5)).."%")
+    self:slider(x+12,372,w-24,app.brushPigmentLoad,"Carga de pigmento",function(v)
+        app.brushPigmentLoad=v
+    end,tostring(math.floor(app.brushPigmentLoad*100+0.5)).."%")
+    self:print("COMPARACAO DE TINTA",x,448,C.white,self.small)
+    self:print("Mesma cor sobre vermelho e azul",x,468,C.muted,self.small)
+    local strips={
+        {"PINCEL SECO",BrushPreview.getDryComparison(app),494},
+        {"PINCEL UMIDO",BrushPreview.getLive(app,true),591},
+    }
+    for _,entry in ipairs(strips) do
+        self:print(entry[1],x+5,entry[3],C.muted,self.small)
+        self:rect(x+5,entry[3]+21,w-10,62,C.surface,10)
+        local img=entry[2]
+        if img then
+            local iw,ih=img:getDimensions()
+            love.graphics.push("all")
+            love.graphics.setScissor(x+10,entry[3]+25,w-20,53)
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(img,x+11,entry[3]+26,0,(w-22)/iw,51/ih)
+            love.graphics.pop()
+        else
+            self:print("Motor C++ indisponivel",x+15,entry[3]+42,
+                C.muted,self.small,w-30)
+        end
+    end
+    self:button(x+4,716,(w-14)/2,33,"Salvar preset",function()
+        app:saveBrushProfile()
+    end,"primary")
+    self:button(x+10+(w-14)/2,716,(w-14)/2,33,"Restaurar",function()
+        app:resetBrushProfile()
+    end)
+    if h>813 then
+        self:print("Mistura local, nao simula secagem fisica.",x+6,772,C.muted,self.small,w-12)
+    end
+end
+
 function UI:drawColorPanel(app,x,w,h)
     self:print("ESTUDIO DE CORES",x,155,C.white)
     self:print("Toque no anel ou no quadrado",x,180,C.muted,self.small)
@@ -905,7 +948,8 @@ function UI:draw(app)
     local panelWidth=self.inspectorWidth-36
     self:rect(px,78,panelWidth,43,C.top,10)
     local tabs={{"Pinceis","brush"},{"Ajustes","settings"},
-        {"Textura","texture"},{"Camadas","layers"},{"Cor","color"}}
+        {"Textura","texture"},{"Tinta","wet"},
+        {"Camadas","layers"},{"Cor","color"}}
     for i,t in ipairs(tabs) do
         local tw=(panelWidth-8)/#tabs
         local xx=px+4+(i-1)*tw
@@ -919,6 +963,7 @@ function UI:draw(app)
     elseif self.tab=="settings" then self:drawSettings(app,px,panelWidth,h)
     elseif self.tab=="layers" then self:drawLayersPanel(app,px,panelWidth,h)
     elseif self.tab=="texture" then self:drawTexturePanel(app,px,panelWidth,h)
+    elseif self.tab=="wet" then self:drawWetPanel(app,px,panelWidth,h)
     else self:drawColorPanel(app,px,panelWidth,h) end
     -- Splitter is intentionally above the panels in hit priority.
     self:rect(right-2,64,4,h-100,C.divider)

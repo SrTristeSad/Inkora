@@ -15,6 +15,7 @@ local app = {
     brushHardness=0.82, brushSpacing=0.18, brushTip=0,
     brushAngle=25, brushFollowPath=false,
     brushTexture=0,brushScatter=0,brushSizeJitter=0,
+    brushWetness=0,brushPigmentLoad=1,
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
     presetId="ink", profiles={}, pressureCurve="Linear",
     sampledPressure=nil,
@@ -274,6 +275,7 @@ function app:strokeStart(x,y,pressure)
         flow=self.brushFlow,pressureOpacity=self.pressureOpacity,
         texture=self.brushTexture,scatter=self.brushScatter,
         sizeJitter=self.brushSizeJitter,
+        wetness=self.brushWetness,pigmentLoad=self.brushPigmentLoad,
         alphaLock=layer.alphaLock,selection=self.doc.selection,
     })
     self.dragging={
@@ -437,7 +439,7 @@ function love.load()
     if preview=="brush" or preview=="layers" or preview=="color"
         or preview=="rotate" or preview=="settings"
         or preview=="stabilization" or preview=="direction"
-        or preview=="texture" then
+        or preview=="texture" or preview=="wet" then
         if preview=="direction" then
             require("tests.preview").directional(app)
         else require("tests.preview").seed(app) end
@@ -447,6 +449,10 @@ function love.load()
             app.ui.tab="brush"
         elseif preview=="direction" then
             app.ui.tab="settings"
+        elseif preview=="wet" then
+            app:choosePreset("watercolor")
+            app.ui.tab="wet"
+            app:statusMessage("Inkora: tinta umida e mistura de pigmentos C++")
         elseif preview=="texture" then
             app:choosePreset("chalk")
             app.brushTexture=0.9

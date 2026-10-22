@@ -67,10 +67,11 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
          InkoraRect& dirty,const InkoraTip* tip,const InkoraMask* mask,
          float flow,float pressureOpacity,const InkoraPaintClip* clip,
          float directionAngle,const InkoraBrushDynamics* dynamics,
-         uint32_t stampIndex) {
+         uint32_t stampIndex,const InkoraWetPaint* wet) {
     if (s.opacity <= 0.0f || flow <= 0.0f) return;
     // An eraser would change alpha, which is forbidden in alpha-lock mode.
     if (clip && clip->alpha_lock && s.eraser) return;
+    const bool wetPaint=wet && wet->wetness>0.0f && !s.eraser;
     const float ink=saturate(s.opacity)*saturate(flow)*
         (1.0f-saturate(pressureOpacity)+saturate(pressureOpacity)*saturate(pressure));
     if (ink<=0.0f) return;
@@ -156,14 +157,30 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
                 else strength*=1.0f-dynamics->texture*0.25f;
             }
             if(strength<=0.0f) continue;
+            if(wetPaint) {
+                // Less pigment produces a softer transparent wash.
+                // The dry ABI behavior remains completely unchanged.
+                strength*=0.25f+0.75f*wet->pigment_load;
+            }
             uint8_t* p=s.pixels+static_cast<size_t>(y)*s.stride+static_cast<size_t>(x)*4u;
             const float oldA=unit(p[3]);
+            float cr=saturate(s.r),cg=saturate(s.g),cb=saturate(s.b);
+            if(wetPaint && oldA>0.0f) {
+                // Geometric color blend produces darker pigment overlap
+                // than regular RGB interpolation (stylized watercolor).
+                // This is not physical pigment advection / brush pickup.
+                const float pickup=wet->wetness*oldA*
+                    (1.0f-0.85f*wet->pigment_load);
+                cr=cr*(1.0f-pickup)+std::sqrt(cr*unit(p[0]))*pickup;
+                cg=cg*(1.0f-pickup)+std::sqrt(cg*unit(p[1]))*pickup;
+                cb=cb*(1.0f-pickup)+std::sqrt(cb*unit(p[2]))*pickup;
+            }
             if(clip && clip->alpha_lock) {
                 if(p[3]==0) continue; // Transparent pixels stay transparent.
                 // Lock existing alpha and replace RGB within that coverage.
-                p[0]=byte(unit(p[0])*(1.0f-strength)+saturate(s.r)*strength);
-                p[1]=byte(unit(p[1])*(1.0f-strength)+saturate(s.g)*strength);
-                p[2]=byte(unit(p[2])*(1.0f-strength)+saturate(s.b)*strength);
+                p[0]=byte(unit(p[0])*(1.0f-strength)+cr*strength);
+                p[1]=byte(unit(p[1])*(1.0f-strength)+cg*strength);
+                p[2]=byte(unit(p[2])*(1.0f-strength)+cb*strength);
             } else if(s.eraser) {
                 const float newA=oldA*(1.0f-strength);
                 if(newA<1.0f/512.0f) p[0]=p[1]=p[2]=p[3]=0;
@@ -172,9 +189,9 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
                 const float newA=strength+oldA*(1.0f-strength);
                 if(newA<1.0f/512.0f) continue;
                 const float oldWeight=oldA*(1.0f-strength);
-                p[0]=byte((saturate(s.r)*strength+unit(p[0])*oldWeight)/newA);
-                p[1]=byte((saturate(s.g)*strength+unit(p[1])*oldWeight)/newA);
-                p[2]=byte((saturate(s.b)*strength+unit(p[2])*oldWeight)/newA);
+                p[0]=byte((cr*strength+unit(p[0])*oldWeight)/newA);
+                p[1]=byte((cg*strength+unit(p[1])*oldWeight)/newA);
+                p[2]=byte((cb*strength+unit(p[2])*oldWeight)/newA);
                 p[3]=byte(newA);
             }
             touched=true;
@@ -184,14 +201,18 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
 }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 9; }
+extern "C" int32_t inkora_core_api_version(void) { return 10; }
 
 static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
                           InkoraRect* dirty,const InkoraTip* tip,
                           const InkoraMask* mask,float flow,float pressureOpacity,
                           const InkoraPaintClip* clip,InkoraBrushDirection* direction,
-                          InkoraBrushDynamics* dynamics) {
+                          InkoraBrushDynamics* dynamics,
+                          const InkoraWetPaint* wet) {
     if (!src || !state || !dirty || !valid(*src)) return 0;
+    if(wet && (!finite(wet->wetness) || !finite(wet->pigment_load) ||
+       wet->wetness<0.0f || wet->wetness>1.0f ||
+       wet->pigment_load<0.0f || wet->pigment_load>1.0f)) return 0;
     if(dynamics && (!finite(dynamics->texture) ||
        !finite(dynamics->scatter) || !finite(dynamics->size_jitter) ||
        dynamics->texture<0.0f || dynamics->texture>1.0f ||
@@ -236,7 +257,7 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     const float step=std::max(0.75f,s.diameter*s.spacing);
 
     if (!state->initialized) {
-        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip,mask,flow,pressureOpacity,clip,nibAngle,dynamics,stamp++);
+        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip,mask,flow,pressureOpacity,clip,nibAngle,dynamics,stamp++,wet);
         if(dynamics) dynamics->stamp_index=stamp;
         state->initialized=1;
         state->distance_to_next=step;
@@ -249,7 +270,7 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     while(travel<=distance+0.00001f) {
         const float t=std::min(1.0f,travel/distance);
         dab(s,s.x0+dx*t,s.y0+dy*t,
-            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip,mask,flow,pressureOpacity,clip,nibAngle,dynamics,stamp++);
+            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip,mask,flow,pressureOpacity,clip,nibAngle,dynamics,stamp++,wet);
         travel+=step;
     }
     state->distance_to_next=travel-distance;
@@ -259,26 +280,26 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
 
 extern "C" int32_t inkora_core_stroke_v2(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty) {
-    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v3(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip) {
-    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v4(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip,const InkoraMask* mask,float flow,float pressureOpacity) {
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v6(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip,const InkoraMask* mask,float flow,
     float pressureOpacity,const InkoraPaintClip* clip) {
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v8(
@@ -287,7 +308,7 @@ extern "C" int32_t inkora_core_stroke_v8(
     float pressureOpacity,const InkoraPaintClip* clip,
     InkoraBrushDirection* direction) {
     if(!direction) return 0;
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,direction,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,direction,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v9(
@@ -297,7 +318,18 @@ extern "C" int32_t inkora_core_stroke_v9(
     InkoraBrushDirection* direction,InkoraBrushDynamics* dynamics) {
     if(!direction || !dynamics) return 0;
     return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,
-                      clip,direction,dynamics);
+                      clip,direction,dynamics,nullptr);
+}
+
+extern "C" int32_t inkora_core_stroke_v10(
+    const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
+    const InkoraTip* tip,const InkoraMask* mask,float flow,
+    float pressureOpacity,const InkoraPaintClip* clip,
+    InkoraBrushDirection* direction,InkoraBrushDynamics* dynamics,
+    const InkoraWetPaint* wet) {
+    if(!direction || !dynamics || !wet) return 0;
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,
+                      clip,direction,dynamics,wet);
 }
 
 extern "C" int32_t inkora_core_stroke(const InkoraStroke* src) {

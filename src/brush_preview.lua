@@ -6,6 +6,7 @@ local Stabilizer=require("src.stabilizer")
 local Preview={}
 local cards={}
 local live=nil
+local dryComparison=nil
 local WIDTH,HEIGHT=168,44
 
 local function signature(style,mask,ink)
@@ -19,6 +20,8 @@ local function signature(style,mask,ink)
         tostring(style.angle or 0),tostring(style.followPath or false),
         tostring(style.texture or 0),tostring(style.scatter or 0),
         tostring(style.sizeJitter or 0),
+        tostring(style.wetness or 0),tostring(style.pigmentLoad or 1),
+        tostring(style.demoWet or false),
         mask and tostring(mask.buffer) or "nomask",
         string.format("%.4f,%.4f,%.4f",
             ink[1] or 0,ink[2] or 0,ink[3] or 0)
@@ -32,6 +35,20 @@ local function render(style,mask,ink)
     love.graphics.clear(0,0,0,0)
     love.graphics.pop()
     Native.registerBlank(canvas)
+    if style.demoWet then
+        -- A colored underpainting makes wet blending visibly distinct
+        -- from ordinary dry compositing; all pixels come from C++ strokes.
+        for i=1,2 do
+            local coat=Brush.beginStroke(canvas,{
+                hardness=1,spacing=0.12,tip=0,flow=1,
+                pressureOpacity=0,wetness=0,pigmentLoad=1,
+            })
+            local under=i==1 and {0.94,0.28,0.34} or {0.23,0.40,0.96}
+            local ax=i==1 and 8 or 84
+            Brush.segment(canvas,ax,22,ax+76,22,under,
+                36,1,false,coat,1,1)
+        end
+    end
     local session=Brush.beginStroke(canvas,{
         hardness=style.hardness,spacing=style.spacing,
         tip=style.tip,aspect=0.3,angle=style.angle or 0,
@@ -41,6 +58,7 @@ local function render(style,mask,ink)
         flow=style.flow,pressureOpacity=style.pressureOpacity,
         texture=style.texture or 0,scatter=style.scatter or 0,
         sizeJitter=style.sizeJitter or 0,
+        wetness=style.wetness or 0,pigmentLoad=style.pigmentLoad or 1,
     })
     assert(session,"Motor C++ nao criou a previa de pincel")
     -- A scaled simulation makes small and big tips identifiable without
@@ -89,9 +107,8 @@ end
 -- The active editor settings, not the original preset values, are rendered.
 -- Only one dynamic image is held at a time: sliding controls does not
 -- continually allocate new retained canvases.
-function Preview.getLive(app)
-    if not Native.available() then return nil end
-    local style={
+local function liveStyle(app,demo)
+    return {
         id="live",size=app.brushSize,hardness=app.brushHardness,
         spacing=app.brushSpacing,opacity=app.brushOpacity,
         flow=app.brushFlow,pressureOpacity=app.pressureOpacity,
@@ -100,7 +117,14 @@ function Preview.getLive(app)
         followPath=app.brushFollowPath,
         texture=app.brushTexture,scatter=app.brushScatter,
         sizeJitter=app.brushSizeJitter,
+        wetness=app.brushWetness,pigmentLoad=app.brushPigmentLoad,
+        demoWet=not not demo,
     }
+end
+
+function Preview.getLive(app,demo)
+    if not Native.available() then return nil end
+    local style=liveStyle(app,demo)
     local mask=style.tip==3 and app.tipMask or nil
     if style.tip==3 and not mask then return nil end
     local ink=app.color or {0.28,0.73,0.93}
@@ -108,6 +132,20 @@ function Preview.getLive(app)
     if live and live.key==key then return live.canvas end
     live={key=key,canvas=render(style,mask,ink)}
     return live.canvas
+end
+
+function Preview.getDryComparison(app)
+    if not Native.available() then return nil end
+    local style=liveStyle(app,true)
+    style.wetness=0
+    local mask=style.tip==3 and app.tipMask or nil
+    if style.tip==3 and not mask then return nil end
+    local ink=app.color or {0.28,0.73,0.93}
+    local key=signature(style,mask,ink)
+    if not dryComparison or dryComparison.key~=key then
+        dryComparison={key=key,canvas=render(style,mask,ink)}
+    end
+    return dryComparison.canvas
 end
 
 function Preview.invalidate(id)
@@ -119,6 +157,7 @@ function Preview.invalidate(id)
         cards={}
     end
     live=nil
+    dryComparison=nil
 end
 
 function Preview.stats()

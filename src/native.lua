@@ -51,6 +51,9 @@ if ffiOK then
         float texture, scatter, size_jitter;
         uint32_t stamp_index;
     } InkoraBrushDynamics;
+    typedef struct InkoraWetPaint {
+        float wetness, pigment_load;
+    } InkoraWetPaint;
     typedef struct InkoraLayerEffects {
         const uint8_t *mask_rgba;
         uint64_t mask_bytes;
@@ -74,11 +77,11 @@ if ffiOK then
         int32_t width, int32_t height, float opacity, int32_t blend_mode,
         const InkoraLayerEffects *effects);
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v9(const InkoraStroke *stroke,
+    int32_t inkora_core_stroke_v10(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
         const InkoraMask *mask, float flow, float pressure_opacity,
         const InkoraPaintClip *clip, InkoraBrushDirection *direction,
-        InkoraBrushDynamics *dynamics);
+        InkoraBrushDynamics *dynamics, const InkoraWetPaint *wet);
     ]]
 end
 
@@ -110,11 +113,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==9 then
+            if vok and version==10 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v9)"
+            Native.error="ABI C++ incompativel (requer v10)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -290,10 +293,13 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     dynamic[0].scatter=session.settings.scatter or 0
     dynamic[0].size_jitter=session.settings.sizeJitter or 0
     dynamic[0].stamp_index=originalDynamics.stamp_index
+    local wet=ffi.new("InkoraWetPaint[1]")
+    wet[0].wetness=session.settings.wetness or 0
+    wet[0].pigment_load=session.settings.pigmentLoad or 1
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v9(stroke,localState,dirty,tip,mask,
+    if Native.library.inkora_core_stroke_v10(stroke,localState,dirty,tip,mask,
             session.settings.flow or 1,session.settings.pressureOpacity or 0,
-            clip,direction,dynamic)~=1 then
+            clip,direction,dynamic,wet)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),
