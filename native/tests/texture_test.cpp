@@ -41,7 +41,7 @@ static long alphaSum(const Pixels& p) {
     return total;
 }
 int main() {
-    assert(inkora_core_api_version()==11);
+    assert(inkora_core_api_version()==12);
     Pixels plain(W*H*4,0),textured(W*H*4,0),
            scattered(W*H*4,0),jittered(W*H*4,0);
     InkoraBrushDynamics zero{0,0,0,0},texture{0.92f,0,0,0};

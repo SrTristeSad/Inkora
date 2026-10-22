@@ -7,7 +7,7 @@ local ffiOK,ffi=pcall(require,"ffi")
 local TILE_SIZE=128
 local TILE_LIMIT=math.max(4,math.min(256,math.floor(tonumber(os.getenv("INKORA_TILE_LIMIT")) or 96)))
 local layerCaches=setmetatable({},{__mode="k"})
-local metrics={readbacks=0,readbackPixels=0,uploadedPixels=0,uploadCalls=0,cacheHits=0,zeroTiles=0,evictions=0}
+local metrics={readbacks=0,readbackPixels=0,uploadedPixels=0,uploadCalls=0,cacheHits=0,zeroTiles=0,evictions=0,pigmentSamples=0}
 
 if ffiOK then
     ffi.cdef[[
@@ -60,6 +60,11 @@ if ffiOK then
         float reservoir_r, reservoir_g, reservoir_b;
         int32_t initialized;
     } InkoraPigmentCarry;
+    typedef struct InkoraDabSamples {
+        const uint8_t *rgba;
+        uint64_t buffer_bytes;
+        uint32_t count;
+    } InkoraDabSamples;
     typedef struct InkoraLayerEffects {
         const uint8_t *mask_rgba;
         uint64_t mask_bytes;
@@ -83,12 +88,17 @@ if ffiOK then
         int32_t width, int32_t height, float opacity, int32_t blend_mode,
         const InkoraLayerEffects *effects);
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v11(const InkoraStroke *stroke,
+    int32_t inkora_core_dab_positions_v12(
+        const InkoraStrokeState *state,
+        float x0, float y0, float x1, float y1,
+        float diameter, float spacing, float *out_xy,
+        uint32_t capacity, uint32_t *count);
+    int32_t inkora_core_stroke_v12(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
         const InkoraMask *mask, float flow, float pressure_opacity,
         const InkoraPaintClip *clip, InkoraBrushDirection *direction,
         InkoraBrushDynamics *dynamics, const InkoraWetPaint *wet,
-        InkoraPigmentCarry *carry);
+        InkoraPigmentCarry *carry, const InkoraDabSamples *samples);
     ]]
 end
 
@@ -120,11 +130,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==11 then
+            if vok and version==12 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v11)"
+            Native.error="ABI C++ incompativel (requer v12)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -248,7 +258,7 @@ function Native.beginStroke(canvas,settings)
 end
 
 local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
-                         eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry)
+                         eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry,samples)
     local stroke=ffi.new("InkoraStroke[1]")
     local s=stroke[0]
     s.pixels=ffi.cast("uint8_t*",tile.data:getFFIPointer())
@@ -316,9 +326,9 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     carry[0].reservoir_b=originalCarry.reservoir_b
     carry[0].initialized=originalCarry.initialized
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v11(stroke,localState,dirty,tip,mask,
+    if Native.library.inkora_core_stroke_v12(stroke,localState,dirty,tip,mask,
             session.settings.flow or 1,session.settings.pressureOpacity or 0,
-            clip,direction,dynamic,wet,carry)~=1 then
+            clip,direction,dynamic,wet,carry,samples and samples.packet or nil)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),
@@ -362,7 +372,7 @@ local function union(a,b)
 end
 
 local function advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
-                            eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry)
+                            eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry,samples)
     -- Sem tiles visiveis: avance a fase de spacing via um bitmap descartavel.
     local empty={x=-10000,y=-10000,w=1,h=1,data=session.dummy}
     if not empty.data then
@@ -370,8 +380,52 @@ local function advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
         empty.data=session.dummy
     end
     local _,updated,updatedDirection,updatedDynamics,updatedCarry=paintTile(session,empty,x0,y0,x1,y1,color,diameter,opacity,
-        eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry)
+        eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry,samples)
     return updated,updatedDirection,updatedDynamics,updatedCarry
+end
+
+-- Sample the UNPAINTED source-layer pixels at exact native dab locations
+-- in a two-pass query. This list is shared across every tile of this segment.
+-- Reuse the existing 128px LRU tiles to avoid per-dab GPU readbacks.
+local function collectPigmentSamples(session,x0,y0,x1,y1,diameter,initial)
+    local state=ffi.new("InkoraStrokeState[1]")
+    state[0].initialized=initial.initialized
+    state[0].distance_to_next=initial.distance_to_next
+    local count=ffi.new("uint32_t[1]")
+    local spacing=session.settings.spacing or 0.18
+    local ok=Native.library.inkora_core_dab_positions_v12(
+        state,x0,y0,x1,y1,diameter,spacing,nil,0,count)
+    assert(ok==1,"Motor C++ rejeitou consulta de posicoes de carimbo")
+    local n=tonumber(count[0])
+    local positions=ffi.new("float[?]",math.max(2,2*n))
+    assert(Native.library.inkora_core_dab_positions_v12(
+        state,x0,y0,x1,y1,diameter,spacing,positions,n,count)==1,
+        "Motor C++ nao enumerou os carimbos")
+    local bytes=ffi.new("uint8_t[?]",math.max(4,4*n))
+    local cache=session.cache
+    local selection=session.settings.selection
+    for i=0,n-1 do
+        local x=math.floor(tonumber(positions[2*i]))
+        local y=math.floor(tonumber(positions[2*i+1]))
+        if x>=0 and y>=0 and x<cache.width and y<cache.height
+           and (not selection or (x>=selection.x0 and x<selection.x1
+               and y>=selection.y0 and y<selection.y1)) then
+            local tile=getTile(cache,session.canvas,
+                math.floor(x/TILE_SIZE),math.floor(y/TILE_SIZE))
+            local r,g,b,a=tile.data:getPixel(x-tile.x,y-tile.y)
+            local offset=i*4
+            bytes[offset]=math.floor(r*255+0.5)
+            bytes[offset+1]=math.floor(g*255+0.5)
+            bytes[offset+2]=math.floor(b*255+0.5)
+            bytes[offset+3]=math.floor(a*255+0.5)
+        end
+    end
+    metrics.pigmentSamples=metrics.pigmentSamples+n
+    local packet=ffi.new("InkoraDabSamples[1]")
+    packet[0].rgba=bytes
+    packet[0].buffer_bytes=4*n
+    packet[0].count=n
+    return {packet=packet,bytes=bytes}
 end
 
 function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressure0,pressure1)
@@ -402,20 +456,10 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
         initialized=tonumber(oldCarry.initialized),
         sample_r=0,sample_g=0,sample_b=0,sample_a=0,
     }
+    local samples=nil
     if not eraser and (session.settings.pigmentPickup or 0)>0
-       and (session.settings.wetness or 0)>0 then
-        local px=math.floor(x1)
-        local py=math.floor(y1)
-        local selected=session.settings.selection
-        if px>=0 and py>=0 and px<cache.width and py<cache.height
-           and (not selected or (px>=selected.x0 and px<selected.x1
-               and py>=selected.y0 and py<selected.y1)) then
-            local tile=getTile(cache,session.canvas,
-                math.floor(px/TILE_SIZE),math.floor(py/TILE_SIZE))
-            originalCarry.sample_r,originalCarry.sample_g,
-                originalCarry.sample_b,originalCarry.sample_a=
-                tile.data:getPixel(px-tile.x,py-tile.y)
-        end
+        and (session.settings.wetness or 0)>0 then
+        samples=collectPigmentSamples(session,x0,y0,x1,y1,diameter,initial)
     end
     local newCarry=nil
     local newDynamics=nil
@@ -429,7 +473,7 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
             for tx=math.floor(left/TILE_SIZE),math.floor(right/TILE_SIZE) do
                 local tile=getTile(cache,session.canvas,tx,ty)
                 local dirty,state,turned,changedDab,changedCarry=paintTile(session,tile,x0,y0,x1,y1,color,diameter,
-                    opacity,eraser,pressure0,pressure1,initial,originalDirection,originalDynamics,originalCarry)
+                    opacity,eraser,pressure0,pressure1,initial,originalDirection,originalDynamics,originalCarry,samples)
                 newState=state
                 newDirection=turned
                 newDynamics=changedDab
@@ -444,7 +488,7 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
     end
     if not newState then
         newState,newDirection,newDynamics,newCarry=advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
-            eraser,pressure0,pressure1,initial,originalDirection,originalDynamics,originalCarry)
+            eraser,pressure0,pressure1,initial,originalDirection,originalDynamics,originalCarry,samples)
     end
     session.state[0].distance_to_next=newState.distance_to_next
     session.state[0].initialized=newState.initialized

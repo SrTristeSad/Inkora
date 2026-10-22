@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v11: reservatório de pigmento persistente por traço, captação e retenção; validar testes e CI** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v11, captação/retencão de pigmento + textura/direção, blend, máscaras e clipping** |
+| Motor gráfico Inkora em C++ | **C++ ABI v12: pigmento amostrado por cada carimbo com cache RGBA e igualdade entre tiles; testes CI** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v12: posições de carimbos e amostragem pré-pintura; textura/direção, blend, máscaras e clipping** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; build automático. Execução/mesa real Windows ainda sem validação** |
 | Entrada de caneta Windows | **Ponte WinTab experimental via LuaJIT FFI, sem interceptar SDL, com curvas de pressão e fallback; teste com driver físico pendente** |
 | Android sobre o mesmo núcleo | **Futuro** |
@@ -34,6 +34,9 @@
 - [x] C++ v9: textura determinística em coordenadas globais, dispersão e variação do diâmetro por carimbo, sem costuras entre tiles.
 - [x] C++ v10: mistura de pigmentos com cores preexistentes na mesma camada, regulação de umidade e carga, com resultado seco idêntico à ABI v9.
 - [x] C++ v11: reservatório do pincel com amostragem antes do segmento, captação e retenção de pigmento, mantendo continuidade entre eventos e igualdade dos resultados entre tiles.
+- [x] C++ v12: API de consulta de posições dos carimbos em duas passagens, buffer validado de amostras RGBA por carimbo, reservatório atualizado a cada carimbo e mesma lista para todos os tiles.
+- [x] Leitura de amostras por cache LRU de tiles, sem recapturar GPU por carimbo; instrumentação `Native.stats().pigmentSamples` e testes C++/Lua de continuidade.
+- [ ] Medir desempenho/latência em documentos grandes e realizar perfis de readback e uso de memória para a nova captação.
 - [x] Aba Tinta exibe mistura local versus transporte de pigmento; Aquarela usa o novo modo e os perfis antigos são compatíveis.
 - [ ] Pigmento físico com captação por carimbo, transporte entre pixels e mistura com vizinhança; medir desempenho.
 - [x] Aba Tinta com comparação seca/úmida renderizada em C++, controles e persistência de presets (15 campos com leitura dos 8/10/13 antigos).

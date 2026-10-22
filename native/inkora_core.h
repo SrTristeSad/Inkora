@@ -170,6 +170,32 @@ INKORA_API int32_t inkora_core_stroke_v11(
     InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics,
     const InkoraWetPaint *wet, InkoraPigmentCarry *carry);
 
+// ABI v12: the caller samples untouched source-layer pixels at EACH dab
+// before rendering the segment. Samples are straight-alpha RGBA8 and ordered
+// identically to inkora_core_dab_positions_v12. Each tile receives the SAME
+// sample list and the SAME initial pigment state, preventing tile seams.
+// The function rejects a mismatched count before modifying any pixels.
+typedef struct InkoraDabSamples {
+    const uint8_t *rgba;
+    uint64_t buffer_bytes;
+    uint32_t count;
+} InkoraDabSamples;
+
+// Two-pass API: first call with out_xy=null and capacity=0 to obtain count;
+// then allocate 2*count floats and call again for exact dab center positions.
+INKORA_API int32_t inkora_core_dab_positions_v12(
+    const InkoraStrokeState *state,
+    float x0, float y0, float x1, float y1, float diameter, float spacing,
+    float *out_xy, uint32_t capacity, uint32_t *count);
+
+INKORA_API int32_t inkora_core_stroke_v12(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow,
+    float pressure_opacity, const InkoraPaintClip *clip,
+    InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics,
+    const InkoraWetPaint *wet, InkoraPigmentCarry *carry,
+    const InkoraDabSamples *samples);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);
