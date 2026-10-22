@@ -959,8 +959,7 @@ function Startup:drawNewDialog(app,w,h)
             if hh>0 then
                 self:hit(px+7,hy,panelW-14,hh,"preset-"..i,function()
                     self:choosePreset(i)
-                    self.galleryModal=nil
-                    self:submit(app)
+                    if self:submit(app) then self.galleryModal=nil end
                 end)
             end
         end
@@ -969,8 +968,7 @@ function Startup:drawNewDialog(app,w,h)
     -- Custom dimensions are committed by OK; presets work on one tap.
     self:label("OK",px+panelW-35,py+199,self.fonts.body,G.ink)
     self:hit(px+panelW-44,py+192,43,30,"create-artwork",function()
-        self.galleryModal=nil
-        self:submit(app)
+        if self:submit(app) then self.galleryModal=nil end
     end)
     if self.error then
         drawRect(px,py+ph-33,panelW,33,{0.92,0.82,0.79})
@@ -1272,6 +1270,13 @@ function Startup:click(x,y)
     return false
 end
 function Startup:wheel(delta)
+    if self.galleryModal and self.galleryModal.kind=="new" then
+        self.canvasScroll=clamp(self.canvasScroll-delta*42,0,
+            math.max(0,#PRESETS*41+54-(love.graphics.getHeight()-
+                math.max(12,math.floor(love.graphics.getHeight()*0.043))-
+                34-278-12)))
+        return
+    end
     if self.galleryDetailKey or self.galleryModal then return end
     if self.galleryMaxScroll and self.galleryMaxScroll>0 then
         self.galleryScroll=clamp(self.galleryScroll-delta*75,0,self.galleryMaxScroll)
@@ -1282,6 +1287,14 @@ function Startup:keypressed(app,key)
         local modal=self.galleryModal
         if modal then
             if key=="escape" then self.galleryModal=nil
+            elseif modal.kind=="new" then
+                if key=="tab" then
+                    modal.focus=modal.focus=="width" and "height" or "width"
+                elseif key=="backspace" and modal.focus then
+                    self.draft[modal.focus]=self.draft[modal.focus]:sub(1,-2)
+                elseif key=="return" or key=="kpenter" then
+                    self:submit(app)
+                end
             elseif modal.kind=="rename" or modal.kind=="folder" or
                 modal.kind=="folder-rename" then
                 if key=="backspace" then
@@ -1336,6 +1349,15 @@ function Startup:keypressed(app,key)
     return false
 end
 function Startup:textinput(text)
+    if self.galleryModal and self.galleryModal.kind=="new" then
+        local focus=self.galleryModal.focus
+        if focus=="width" or focus=="height" then
+            self.draft[focus]=(self.draft[focus]..text:gsub("%D","")):sub(1,4)
+            self.draft.preset=nil
+            self.error=nil
+        end
+        return
+    end
     if self.galleryModal and (self.galleryModal.kind=="rename" or
         self.galleryModal.kind=="folder" or
         self.galleryModal.kind=="folder-rename") then
