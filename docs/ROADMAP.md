@@ -1,6 +1,6 @@
 # Inkora — Plano de desenvolvimento vinculante
 
-> **Objetivo:** equivalencia funcional progressiva com o ibisPaint, por estudo do comportamento observavel; Lua + C++ nativo, Windows primeiro, Android depois. Consulte [AGENTS.md](../AGENTS.md).
+> **Objetivo vinculante:** **engenharia reversa funcional do ibisPaint e reproducao de seu funcionamento em Lua + C++ nativo**, nao apenas um editor inspirado ou semelhante. Documentar comportamento observado, reproduzi-lo com implementacao independente e validar por comparacao real; o desenvolvimento e incremental, mas a meta final e a paridade funcional demonstrada. Windows primeiro, Android depois. Consulte [AGENTS.md](../AGENTS.md).
 
 ## Estado verificado do repositorio
 

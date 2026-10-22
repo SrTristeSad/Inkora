@@ -3,7 +3,7 @@
 > **TRABALHA, IA.** Leia isto **antes** de alterar qualquer arquivo. Nao transforme a visao do usuario em um editor de rabiscos.
 
 ## MISSAO INEGOCIAVEL
-Reconstruir **funcionalmente o ibisPaint** por engenharia reversa do comportamento observavel: ferramentas, pinceis, sensacao do traco, fluxo de trabalho, camadas, filtros, selecao, desempenho e UX. Nome, identidade, codigo e recursos do Inkora devem ser proprios. **Nao basta criar um aplicativo que "desenha".** A meta e atingir progressivamente equivalencia funcional real, verificavel por testes.
+Realizar **engenharia reversa funcional do ibisPaint e reconstruir seu comportamento no Inkora, em Lua + C++**. O produto de referencia e o **alvo de reproducao funcional**, nao apenas uma inspiracao ou um editor do mesmo genero. Reproduzir por investigacao sistematica o funcionamento das ferramentas, parametros e dinamicas dos pinceis, sensacao do traco, selecoes, camadas, mascaras, filtros, transformacoes, gestos, atalhos, fluxo de trabalho, interface e desempenho, incluindo casos extremos. A implementacao sera independente, com codigo, nome e recursos proprios, sem extrair codigo proprietario nem contornar protecoes. **Nao trocar o objetivo por "aproximar", "inspirar-se no ibisPaint" ou criar um editor generico.** O desenvolvimento pode ser incremental, mas o **objetivo final e reproduzir funcionalmente o aplicativo de referencia**, com verificacao lado a lado e testes. Nao declarar paridade antes de comprovar.
 
 ## BASE TECNICA DEFINIDA PELO USUARIO
 - **Lua + C++**: Lua controla a UI, ferramentas, comandos e extensoes; **C++ nativo** executa rasterizacao, pinceis, composicao de camadas, filtros e rotinas de alto desempenho, com ponte documentada Lua ↔ C++.
@@ -20,7 +20,7 @@ O usuario apontou que as versoes antigas quase nao tinham diferenca perceptivel.
 
 ## ORDEM DE TRABALHO OBRIGATORIA
 1. Inspecione o codigo existente e consulte **docs/ROADMAP.md**; preserve o que ja funciona.
-2. Faça uma matriz de comportamento do ibisPaint: ferramenta/gesto, resultados, casos extremos e teste comparativo. Identifique o que e **observado** versus **estimado**; nao invente descoberta de engenharia reversa.
+2. Execute engenharia reversa funcional sistematica do ibisPaint: observe cada ferramenta/gesto/parametro, registre entrada e saida, limites, composicao e resultado pixel a pixel quando aplicavel. Mantenha matriz com evidencias, diferencas medidas, casos extremos e teste lado a lado. Identifique o que e **observado** versus **estimado**; nao invente descoberta.
 3. Audite o codigo real de ReveriePaint e Klecks, licencas e dependencias, antes de escolher componentes.
 4. **Motor C++ v1 + API Lua ↔ C++ + pincel integrado implementados**: preserve-os, meca-os e evolua para dirty tiles, parametros profissionais, camadas, composicao, filtros, selecao e UX. Nunca volte ao motor unicamente Lua.
 5. Entregue sempre **codigo executavel**, teste automatico e build Windows, com logs honestos e commits no repositorio. Se houver falha, corrija ou reporte; **nao anuncie sucesso sem verificar**.
@@ -32,6 +32,6 @@ O usuario apontou que as versoes antigas quase nao tinham diferenca perceptivel.
 - Nao prometer desempenho identico nem compatibilidade sem medicao.
 
 ## A REGRA FINAL
-**Nao mude o objetivo, nao reinicie do zero por conveniencia, nao esconda lacunas atras de uma interface bonita.** A cada continuacao, mova o Inkora em direcao ao **ibisPaint funcional em Lua + C++**, mantendo Windows como primeira plataforma.
+**Nao mude o objetivo, nao reinicie do zero por conveniencia, nao esconda lacunas atras de uma interface bonita.** Cada continuacao deve implementar e verificar uma parte concreta da **engenharia reversa funcional do ibisPaint em Lua + C++**, mantendo Windows como primeira plataforma. Este e um projeto de reproducao de comportamento, nao apenas de aproximacao estetica.
 
 **TRABALHA, IA.** O alvo e um editor de pintura serio, nao mais um prototipo generico.
