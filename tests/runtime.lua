@@ -1293,12 +1293,12 @@ local function run(app)
     clickStartup("open-gallery")
     assert(app.screen=="gallery","Inicio nao abriu galeria")
     clickStartup("tool-plus")
-    clickStartup("open-create")
-    assert(app.screen=="create","Galeria nao abriu criacao")
-    clickStartup("preset-7")
+    assert(app.screen=="gallery" and
+        app.startup.galleryModal.kind=="new",
+        "Novo Canvas deveria ser um painel sobre a galeria")
+    clickStartup("preset-11")
     assert(app.startup.draft.width=="256" and
         app.startup.draft.height=="256","Preset pixel art falhou")
-    clickStartup("create-artwork")
     assert(app.screen=="editor" and app.doc.width==256 and app.doc.height==256,
         "Nao entrou no editor apos criar o primeiro desenho")
     local key=app.doc.projectKey
@@ -1411,10 +1411,18 @@ local function run(app)
     -- pointer drag into a group, persisted memberships, move out.
     clickStartup("tool-plus")
     clickStartup("new-folder")
-    assert(app.startup.galleryModal.kind=="folder")
+    assert(app.startup.galleryModal==nil,
+        "Criacao de pasta nao deveria exigir nome antes")
+    local allFolders=app.startup.folders:children("")
+    local group=allFolders[#allFolders].id
+    assert(group and app.startup.folders:name(group):match("^Nova Pasta"),
+        "Pasta nao ganhou nome automatico")
+    app.startup:galleryOpenFolder(group)
+    app.startup:galleryAskRenameFolder()
     app.startup.galleryModal.value="Minhas artes"
-    local group=app.startup:galleryCreateFolder()
-    assert(group and app.startup.folders:name(group)=="Minhas artes")
+    assert(app.startup:galleryRenameFolder())
+    app.startup.galleryFolder=""
+    app.startup:refreshGallery()
     love.draw()
     local folderHit,artHit
     for _,hit in ipairs(app.startup.hits) do
@@ -1435,8 +1443,8 @@ local function run(app)
     assert(groupedCount==1,"Arrastar desenho nao inseriu no grupo")
     assert(app.startup:galleryOpenFolder(group))
     app.startup:galleryAskFolder()
-    app.startup.galleryModal.value="Estudos"
-    local child=app.startup:galleryCreateFolder()
+    local children=app.startup.folders:children(group)
+    local child=children[#children].id
     assert(app.startup.folders:parent(child)==group,
         "Criacao de subpastas nao funciona")
     app.startup:galleryAskRenameFolder()
@@ -1457,10 +1465,14 @@ local function run(app)
         "Nao foi possivel tirar a obra do grupo")
     app.startup:galleryOpenFolder(child)
     clickStartup("tool-plus")
-    clickStartup("open-create")
-    assert(app.screen=="create")
-    clickStartup("preset-7")
+    assert(app.startup.galleryModal and app.startup.galleryModal.kind=="new")
+    clickStartup("new-focus-width")
+    app.startup.draft.width="320"
+    clickStartup("new-focus-height")
+    app.startup.draft.height="480"
     clickStartup("create-artwork")
+    assert(app.screen=="editor" and app.doc.width==320 and app.doc.height==480,
+        "Dimensoes personalizadas nao criaram o canvas esperado")
     local insideKey=app.doc.projectKey
     assert(app.startup.folders:location(insideKey)==child,
         "Novo desenho nao foi criado dentro do grupo aberto")
