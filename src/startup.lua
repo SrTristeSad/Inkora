@@ -442,7 +442,7 @@ function Startup:galleryAskMove()
     if self.galleryDetailKey then keys={self.galleryDetailKey} end
     if #keys==0 then return end
     self.galleryMenu=false
-    self.galleryModal={kind="move",keys=keys,offset=0}
+    self.galleryModal={kind="move",keys=keys,target="",offset=0,naming=false}
 end
 function Startup:galleryMoveKeys(keys,destination)
     local ok,err=pcall(function()
@@ -787,7 +787,10 @@ function Startup:drawGallery(app,w,h)
             n==1 and G.blue or G.muted)
         if n==1 then self:hit(w-253,fy,96,45,"tool-duplicate",
             function()self:galleryDuplicate()end) end
-        self:label("Mover",w-335,fy+14,self.fonts.small,
+        love.graphics.setColor(n>0 and G.blue or G.muted)
+        love.graphics.rectangle("line",w-335,fy+13,19,17,2)
+        love.graphics.line(w-332,fy+10,w-324,fy+10)
+        self:label("Mover",w-307,fy+14,self.fonts.small,
             n>0 and G.blue or G.muted)
         if n>0 then self:hit(w-347,fy,98,45,"tool-move",
             function()self:galleryAskMove()end) end
@@ -998,6 +1001,100 @@ function Startup:drawNewDialog(app,w,h)
     end
 end
 
+function Startup:drawFolderDestination(w,h,modal)
+    -- Selection mode in ibisPaint uses a real folder browser. Choosing
+    -- a row opens that location; 'Mover' commits the destination.
+    local width=math.min(490,w-30)
+    local x=(w-width)/2
+    local top=math.max(30,math.floor(h*0.09))
+    local height=h-top-45
+    drawRect(x,top,width,height,{0.91,0.91,0.91},7)
+    drawRect(x,top,width,46,G.bar,7)
+    self:label("Mover para",x+10,top+13,self.fonts.body,G.white,
+        width-20,"center")
+    self:label("X",x+width-29,top+11,self.fonts.body,G.blue)
+    self:hit(x+width-39,top,39,42,"modal-cancel",function()
+        self.galleryModal=nil
+    end)
+    local breadcrumb=self.folders:name(modal.target)
+    self:label(breadcrumb,x+22,top+61,self.fonts.heading,G.ink,width-44)
+    self:label(#modal.keys.." obra(s) selecionada(s)",
+        x+22,top+90,self.fonts.small,G.muted,width-44)
+    local yy=top+126
+    if modal.target~="" then
+        drawRect(x+8,yy,width-16,43,G.white,2)
+        self:label("< Voltar",x+20,yy+12,self.fonts.body,G.blue)
+        self:hit(x+8,yy,width-16,43,"move-back",function()
+            modal.target=self.folders:parent(modal.target)
+            modal.offset=0
+        end)
+        yy=yy+47
+    end
+    local folders=self.folders:children(modal.target)
+    local bottom=top+height-119
+    local rows=math.max(1,math.floor((bottom-yy)/44))
+    modal.offset=clamp(modal.offset or 0,0,math.max(0,#folders-rows))
+    if #folders==0 then
+        self:label("Nenhuma subpasta",x+20,yy+22,self.fonts.body,
+            G.muted,width-40,"center")
+    else
+        for i=1,math.min(rows,#folders-modal.offset) do
+            local child=folders[i+modal.offset]
+            local y=yy+(i-1)*44
+            drawRect(x+8,y,width-16,42,G.white,1)
+            self:label("▣  "..child.name,x+21,y+13,self.fonts.body,G.ink,width-60)
+            self:label(">",x+width-31,y+13,self.fonts.body,G.muted)
+            self:hit(x+8,y,width-16,42,"move-enter-"..i,function()
+                modal.target=child.id
+                modal.offset=0
+            end)
+        end
+    end
+    if #folders>rows then
+        self:label("<",x+width-100,bottom+4,self.fonts.heading,G.blue)
+        self:label(">",x+width-38,bottom+4,self.fonts.heading,G.blue)
+        self:hit(x+width-114,bottom,41,30,"move-prev",function()
+            modal.offset=clamp(modal.offset-rows,0,#folders-rows)
+        end)
+        self:hit(x+width-50,bottom,42,30,"move-next",function()
+            modal.offset=clamp(modal.offset+rows,0,#folders-rows)
+        end)
+    end
+    if modal.naming then
+        self:label("Nome da nova pasta",x+15,top+height-102,
+            self.fonts.small,G.ink)
+        drawRect(x+12,top+height-81,width-116,36,G.white,3)
+        self:label(modal.newName.."|",x+21,top+height-72,
+            self.fonts.body,G.ink,width-140)
+        self:label("OK",x+width-88,top+height-72,self.fonts.body,G.blue)
+        self:hit(x+width-105,top+height-82,92,39,
+            "move-new-folder-confirm",function()
+                local ok,id=pcall(function()
+                    return self.folders:create(modal.newName,modal.target)
+                end)
+                if ok then modal.target=id;modal.naming=false;modal.offset=0
+                else modal.error=tostring(id) end
+            end)
+    else
+        self:label("+ Nova pasta",x+20,top+height-96,
+            self.fonts.body,G.blue)
+        self:hit(x+12,top+height-105,width-24,41,"move-new-folder",function()
+            modal.naming=true
+            modal.newName=self.folders:defaultName(modal.target)
+        end)
+    end
+    drawRect(x+width-120,top+height-45,110,37,G.bar,17)
+    self:label("Mover",x+width-112,top+height-35,
+        self.fonts.body,G.white,94,"center")
+    self:hit(x+width-120,top+height-45,110,37,"move-commit",function()
+        self:galleryMoveSelected(modal.target)
+    end)
+    if modal.error then
+        self:label(modal.error,x+13,top+height-37,
+            self.fonts.small,C.gold,width-142)
+    end
+end
+
 function Startup:drawFolderInfo(w,h,modal)
     -- ibisPaint's folder information is a BOTTOM sheet, not an alert.
     local width=math.min(480,w-24)
@@ -1054,6 +1151,9 @@ function Startup:drawGalleryModal(app,w,h)
     end
     if modal.kind=="folder-info" then
         self:drawFolderInfo(w,h,modal)
+        return
+    elseif modal.kind=="move" then
+        self:drawFolderDestination(w,h,modal)
         return
     end
     local width=math.min(470,w-80)
@@ -1369,6 +1469,20 @@ function Startup:keypressed(app,key)
         local modal=self.galleryModal
         if modal then
             if key=="escape" then self.galleryModal=nil
+            elseif modal.kind=="move" then
+                if modal.naming and key=="backspace" then
+                    local utf8=require("utf8")
+                    local n=utf8.offset(modal.newName,-1)
+                    if n then modal.newName=modal.newName:sub(1,n-1) end
+                elseif modal.naming and (key=="return" or key=="kpenter") then
+                    local ok,id=pcall(function()
+                        return self.folders:create(modal.newName,modal.target)
+                    end)
+                    if ok then modal.target=id;modal.naming=false
+                    else modal.error=tostring(id) end
+                elseif key=="return" or key=="kpenter" then
+                    self:galleryMoveSelected(modal.target)
+                end
             elseif modal.kind=="folder-info" then
                 if key=="backspace" then
                     local utf8=require("utf8")
@@ -1439,6 +1553,12 @@ function Startup:keypressed(app,key)
     return false
 end
 function Startup:textinput(text)
+    if self.galleryModal and self.galleryModal.kind=="move" and
+        self.galleryModal.naming then
+        local modal=self.galleryModal
+        modal.newName=(modal.newName..text:gsub("[\r\n\t]"," ")):sub(1,64)
+        return
+    end
     if self.galleryModal and self.galleryModal.kind=="folder-info" then
         local modal=self.galleryModal
         modal.value=(modal.value..text:gsub("[\r\n\t]"," ")):sub(1,64)
