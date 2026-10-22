@@ -108,39 +108,50 @@ local HOME_BLUE={0.146,0.278,0.435}
 local HOME_DARK={0.085,0.174,0.281}
 local HOME_OUTLINE={0.83,0.89,0.96}
 
--- Outline pencil for the My Gallery shortcut. Its shaft, eraser ferrule,
--- and sharpened graphite tip are separate, connected shapes. The previous
--- icon was a diagonal line with a square/circle and looked like an arrow.
--- Draw in local coordinates to keep a clean 45-degree pencil at any DPI.
--- Original Lua vector geometry; no third-party art or proprietary bitmap.
-local function drawGalleryPencil(cx,cy,radius)
+-- The My Gallery icon is a drawing brush rather than a pencil:
+-- its rounded handle points toward the TOP RIGHT, while the bristles point
+-- toward the BOTTOM LEFT (the reverse of the incorrect earlier icon).
+-- Drawn as original Inkora Lua vector shapes; no copied ibisPaint artwork.
+local function drawGalleryBrush(cx,cy,radius)
     local u=radius*0.64
     love.graphics.push("all")
     love.graphics.translate(cx,cy)
+    -- In screen coordinates, negative X with -45 deg rotation is down-left.
+    -- The tip is on the negative-X end; the handle is on positive X.
     love.graphics.rotate(-math.pi/4)
     love.graphics.setColor(HOME_OUTLINE)
     love.graphics.setLineStyle("smooth")
     love.graphics.setLineJoin("bevel")
-    love.graphics.setLineWidth(math.max(2,radius*0.029))
+    love.graphics.setLineWidth(math.max(2,radius*0.028))
 
-    -- Main body. The division near the rear forms the pencil's eraser band.
-    love.graphics.rectangle("line",-u*0.83,-u*0.19,
-        u*1.36,u*0.38,u*0.09,u*0.09)
-    love.graphics.line(-u*0.61,-u*0.19,-u*0.61,u*0.19)
-    love.graphics.line(-u*0.48,u*0.08,u*0.39,u*0.08)
+    -- Long, narrow body and rounded butt of the drawing brush.
+    love.graphics.line(
+        -u*0.30,-u*0.17,
+         u*0.65,-u*0.17,
+         u*0.78,-u*0.10,
+         u*0.78, u*0.10,
+         u*0.65, u*0.17,
+        -u*0.30, u*0.17
+    )
+    love.graphics.line(-u*0.04,-u*0.075,u*0.52,-u*0.075)
 
-    -- The two shoulders lead into a deliberately tapered lead point.
-    love.graphics.polygon("line",
-        u*0.53,-u*0.19,
-        u*0.96,0,
-        u*0.53,u*0.19)
-    love.graphics.line(u*0.75,-u*0.095,
-        u*0.93,0,
-        u*0.75,u*0.095)
+    -- Ferrule connecting bristles to handle.
+    love.graphics.rectangle("line",
+        -u*0.49,-u*0.18,u*0.19,u*0.36,u*0.025,u*0.025)
+    love.graphics.line(-u*0.42,-u*0.18,-u*0.42,u*0.18)
 
+    -- Slim, tapered bristle tip, unmistakably at the LOWER-LEFT.
+    love.graphics.line(
+        -u*0.49,-u*0.17,
+        -u*0.67,-u*0.14,
+        -u*0.94,-u*0.015,
+        -u*0.98,0,
+        -u*0.94,u*0.015,
+        -u*0.67,u*0.14,
+        -u*0.49,u*0.17
+    )
     love.graphics.pop()
 end
-
 function Startup:drawHome(app,w,h)
     -- The previous three large cards were not the reference's title layout.
     -- Scale the two navigation targets while preserving a predictable ratio.
@@ -187,7 +198,7 @@ function Startup:drawHome(app,w,h)
             love.graphics.line(x-g*0.87,y-g*0.44,x+g*0.87,y-g*0.44)
             love.graphics.line(x-g*0.87,y+g*0.44,x+g*0.87,y+g*0.44)
         else
-            drawGalleryPencil(x,y,radius)
+            drawGalleryBrush(x,y,radius)
         end
         self:label(item.label,x-radius-65,y+radius+14,
             self.fonts.body,C.light,(radius+65)*2,"center")
