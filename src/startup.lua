@@ -276,6 +276,21 @@ function Startup:thumbnail(project)
     if self.thumbnailCache[key] then return self.thumbnailCache[key] end
     local ok,img=pcall(love.graphics.newImage,project.preview)
     if ok then
+        -- Upgrade thumbnails saved by Inkora's old 320x208 renderer.
+        -- Regenerate ONLY preview.png; editable original layer files
+        -- are left unchanged. Failure is isolated and keeps the old preview.
+        local iw,ih=img:getDimensions()
+        if project.width and project.height and project.height>0 and
+            math.abs(iw/ih-project.width/project.height)>0.025 then
+            local converted=pcall(function()
+                local doc=Document.load(key)
+                doc:saveGalleryPreview("projects/"..key)
+            end)
+            if converted then
+                local valid,newImage=pcall(love.graphics.newImage,project.preview)
+                if valid then img:release();img=newImage end
+            end
+        end
         img:setFilter("linear","linear")
         self.thumbnailCache[key]=img
         return img
