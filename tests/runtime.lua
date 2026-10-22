@@ -584,8 +584,7 @@ local function run(app)
         love.draw()
         -- Native C++ paint remains continuous with new adaptive
         -- stabilization at a simulated 60Hz and the tail lands on release.
-        app.stabilization=0.97
-        app:choosePreset("pencil")
+        app:choosePreset("ink") -- Solid nib: grain must not randomize endpoint assertion.
         app.stabilization=0.97
         local startDocX,startDocY=app.doc.width/2,app.doc.height/2-70
         local startX,startY=app:documentToScreen(startDocX,startDocY)
