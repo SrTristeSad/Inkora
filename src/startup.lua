@@ -405,6 +405,23 @@ function Startup:galleryRenameFolder()
     self.notice="Pasta renomeada."
     return true
 end
+function Startup:galleryFolderInfo()
+    if self.galleryFolder=="" then return false end
+    self.galleryMenu=false
+    self.galleryModal={kind="folder-info",id=self.galleryFolder,
+        value=self.folders:name(self.galleryFolder)}
+    return true
+end
+function Startup:galleryConfirmFolderInfo()
+    local modal=self.galleryModal
+    if not modal or modal.kind~="folder-info" then return false end
+    local ok,err=pcall(function()self.folders:rename(modal.id,modal.value)end)
+    if not ok then modal.error=tostring(err);return false end
+    self.galleryModal=nil
+    self.notice="Nome da pasta atualizado."
+    return true
+end
+
 function Startup:galleryDeleteEmptyFolder()
     if self.galleryFolder=="" then return end
     local folder=self.galleryFolder
@@ -674,8 +691,9 @@ function Startup:drawGallery(app,w,h)
         self:galleryBack(app)
     end)
     if self.galleryFolder~="" and not self.galleryDetailKey then
+        -- The reference renames via long-press on the title, not a tap.
         self:hit(w*0.35,0,w*0.30,headerH,"rename-folder-title",function()
-            self:galleryAskRenameFolder()
+            -- A short tap leaves the folder unchanged.
         end)
     end
     if not self.galleryDetailKey then
@@ -781,9 +799,13 @@ function Startup:drawGallery(app,w,h)
         self:galleryTool(10,fy,"plus",function()self:galleryNewMenu()end)
         local active=self:galleryCurrentKey()~=nil
         self:galleryTool(71,fy,"info",function()
-            local key=self:galleryCurrentKey()
-            if key then self.galleryDetailKey=key end
-        end,not active)
+            if self.galleryFolder~="" and not self.galleryDetailKey then
+                self:galleryFolderInfo()
+            else
+                local key=self:galleryCurrentKey()
+                if key then self.galleryDetailKey=key end
+            end
+        end,not (active or self.galleryFolder~=""))
         self:galleryTool(130,fy,"play",nil,true)
         self:galleryTool(189,fy,"share",function()self:galleryExport()end,not active)
         self:galleryTool(250,fy,"dots",function()
@@ -976,6 +998,50 @@ function Startup:drawNewDialog(app,w,h)
     end
 end
 
+function Startup:drawFolderInfo(w,h,modal)
+    -- ibisPaint's folder information is a BOTTOM sheet, not an alert.
+    local width=math.min(480,w-24)
+    local x=(w-width)/2
+    local y=h-276
+    drawRect(x,y,width,261,G.bar,10)
+    self:label("Informacoes da pasta",x+17,y+12,
+        self.fonts.body,G.white,width-34,"center")
+    self:label("X",x+width-26,y+13,self.fonts.heading,G.blue)
+    self:hit(x+width-45,y,45,43,"modal-cancel",function()
+        self.galleryModal=nil
+    end)
+    self:label("Nome da pasta",x+18,y+51,self.fonts.small,G.white)
+    drawRect(x+17,y+75,width-72,34,G.white,3)
+    self:label(modal.value.."|",x+24,y+82,self.fonts.body,G.ink,width-90)
+    self:hit(x+17,y+75,width-72,35,"folder-focus-name",function()
+        modal.focus="name"
+    end)
+    self:label("OK",x+width-43,y+82,self.fonts.body,G.blue)
+    self:hit(x+width-55,y+72,48,40,"folder-info-save",
+        function()self:galleryConfirmFolderInfo()end)
+    local folderId=modal.id
+    local sub=#self.folders:children(folderId)
+    local art=0
+    for _,p in ipairs(self.projects) do
+        if self.folders:location(p.key)==folderId then art=art+1 end
+    end
+    self:label(("Conteudo: %d desenho(s), %d subpasta(s)"):format(art,sub),
+        x+18,y+133,self.fonts.small,G.white,width-36)
+    if modal.error then
+        self:label(modal.error,x+18,y+169,self.fonts.small,C.gold,width-36)
+    end
+    drawRect(x+17,y+203,width-34,38,{0.08,0.08,0.08},20)
+    local empty=art==0 and sub==0
+    self:label("Excluir pasta",x+17,y+214,self.fonts.body,
+        empty and G.white or G.muted,width-34,"center")
+    if empty then
+        self:hit(x+17,y+203,width-34,38,"folder-info-delete",function()
+            self.galleryModal=nil
+            self:galleryDeleteEmptyFolder()
+        end)
+    end
+end
+
 function Startup:drawGalleryModal(app,w,h)
     local modal=self.galleryModal
     if not modal then return end
@@ -984,6 +1050,10 @@ function Startup:drawGalleryModal(app,w,h)
     love.graphics.rectangle("fill",0,0,w,h)
     if modal.kind=="new" then
         self:drawNewDialog(app,w,h)
+        return
+    end
+    if modal.kind=="folder-info" then
+        self:drawFolderInfo(w,h,modal)
         return
     end
     local width=math.min(470,w-80)
@@ -1190,6 +1260,10 @@ function Startup:pointerPressed(x,y)
     for i=#self.hits,1,-1 do
         if inside(x,y,self.hits[i]) then hit=self.hits[i];break end
     end
+    if hit and hit.kind=="rename-folder-title" then
+        self.folderTitlePress={started=love.timer.getTime(),x=x,y=y}
+        return true
+    end
     if hit and not self.gallerySelecting and not self.galleryDetailKey and
        (hit.kind:match("^gallery%-art%-") or
         hit.kind:match("^gallery%-folder%-")) then
@@ -1211,6 +1285,14 @@ function Startup:pointerMoved(x,y)
     end
 end
 function Startup:pointerReleased(x,y)
+    if self.folderTitlePress then
+        local press=self.folderTitlePress
+        self.folderTitlePress=nil
+        if love.timer.getTime()-press.started>=0.48 then
+            self:galleryAskRenameFolder()
+        end
+        return
+    end
     local d=self.galleryDrag
     self.galleryDrag=nil
     if not d then return end
@@ -1287,6 +1369,14 @@ function Startup:keypressed(app,key)
         local modal=self.galleryModal
         if modal then
             if key=="escape" then self.galleryModal=nil
+            elseif modal.kind=="folder-info" then
+                if key=="backspace" then
+                    local utf8=require("utf8")
+                    local n=utf8.offset(modal.value,-1)
+                    if n then modal.value=modal.value:sub(1,n-1) end
+                elseif key=="return" or key=="kpenter" then
+                    self:galleryConfirmFolderInfo()
+                end
             elseif modal.kind=="new" then
                 if key=="tab" then
                     modal.focus=modal.focus=="width" and "height" or "width"
@@ -1349,6 +1439,11 @@ function Startup:keypressed(app,key)
     return false
 end
 function Startup:textinput(text)
+    if self.galleryModal and self.galleryModal.kind=="folder-info" then
+        local modal=self.galleryModal
+        modal.value=(modal.value..text:gsub("[\r\n\t]"," ")):sub(1,64)
+        return
+    end
     if self.galleryModal and self.galleryModal.kind=="new" then
         local focus=self.galleryModal.focus
         if focus=="width" or focus=="height" then
