@@ -12,6 +12,8 @@ local FIELDS={
     {"stabilization",0,1},
     {"tip",0,3,1},
     {"pressureOpacity",0,1},
+    {"angle",0,180},
+    {"followPath",0,1,1},
 }
 
 local function checkValue(raw,field)
@@ -28,6 +30,7 @@ function Profiles.capture(app)
         spacing=app.brushSpacing,opacity=app.brushOpacity,
         flow=app.brushFlow,stabilization=app.stabilization,
         tip=app.brushTip,pressureOpacity=app.pressureOpacity,
+        angle=app.brushAngle,followPath=app.brushFollowPath and 1 or 0,
     }
 end
 
@@ -37,7 +40,10 @@ function Profiles.merge(defaults,saved)
     if saved then
         for _,field in ipairs(FIELDS) do
             local value=checkValue(saved[field[1]],field)
-            if value then result[field[1]]=value end
+            if value~=nil then
+                if field[1]=="followPath" then result.followPath=value==1
+                else result[field[1]]=value end
+            end
         end
     end
     return result
@@ -52,6 +58,8 @@ function Profiles.apply(app,style)
     app.stabilization=style.stabilization
     app.brushTip=style.tip
     app.pressureOpacity=style.pressureOpacity
+    app.brushAngle=style.angle or 0
+    app.brushFollowPath=style.followPath==true or style.followPath==1
 end
 
 function Profiles.read()
@@ -64,12 +72,16 @@ function Profiles.read()
             fields[#fields+1]=entry
         end
         local id=fields[1]
-        if id and Presets.find(id) and #fields==#FIELDS+1 then
+        -- Eight-parameter brush profiles from v7 still load.
+        local legacy=#fields==#FIELDS-1
+        if id and Presets.find(id) and (#fields==#FIELDS+1 or legacy) then
             local profile={}
             local valid=true
-            for i,field in ipairs(FIELDS) do
+            local limit=legacy and (#FIELDS-2) or #FIELDS
+            for i=1,limit do
+                local field=FIELDS[i]
                 local n=checkValue(fields[i+1],field)
-                if not n then valid=false;break end
+                if n==nil then valid=false;break end
                 profile[field[1]]=n
             end
             if valid then out[id]=profile end
@@ -85,8 +97,14 @@ function Profiles.write(profiles)
         if data then
             local fields={preset.id}
             for _,field in ipairs(FIELDS) do
-                local n=checkValue(data[field[1]],field)
-                if not n then return false,"Parametro invalido: "..field[1] end
+                local raw=data[field[1]]
+                if raw==nil and field[1]=="angle" then
+                    raw=preset.angle
+                elseif raw==nil and field[1]=="followPath" then
+                    raw=preset.followPath and 1 or 0
+                end
+                local n=checkValue(raw,field)
+                if n==nil then return false,"Parametro invalido: "..field[1] end
                 fields[#fields+1]=tostring(n)
             end
             lines[#lines+1]=table.concat(fields,"\t")

@@ -65,7 +65,8 @@ void mark(InkoraRect& r,int x0,int y0,int x1,int y1) {
 
 void dab(const InkoraStroke &s,float cx,float cy,float pressure,
          InkoraRect& dirty,const InkoraTip* tip,const InkoraMask* mask,
-         float flow,float pressureOpacity,const InkoraPaintClip* clip) {
+         float flow,float pressureOpacity,const InkoraPaintClip* clip,
+         float directionAngle) {
     if (s.opacity <= 0.0f || flow <= 0.0f) return;
     // An eraser would change alpha, which is forbidden in alpha-lock mode.
     if (clip && clip->alpha_lock && s.eraser) return;
@@ -78,7 +79,8 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
     const bool flat=tip && tip->tip==1;
     const bool bitmap=mask!=nullptr;
     const bool grainy=tip && tip->tip==2 && tip->grain>0.0f;
-    const float angle=(flat || bitmap) && tip ? tip->angle*0.017453292519943295f : 0.0f;
+    const float angle=(flat || bitmap) && tip ?
+        (tip->angle+directionAngle)*0.017453292519943295f : 0.0f;
     const float ca=std::cos(angle),sa=std::sin(angle);
     const float aspect=flat ? tip->aspect : 1.0f;
     const int x0=std::max(0,static_cast<int>(std::floor(cx-outer)));
@@ -153,13 +155,17 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
 }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 7; }
+extern "C" int32_t inkora_core_api_version(void) { return 8; }
 
 static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
                           InkoraRect* dirty,const InkoraTip* tip,
                           const InkoraMask* mask,float flow,float pressureOpacity,
-                          const InkoraPaintClip* clip) {
+                          const InkoraPaintClip* clip,InkoraBrushDirection* direction) {
     if (!src || !state || !dirty || !valid(*src)) return 0;
+    if(direction && (
+        (direction->follow_path!=0 && direction->follow_path!=1) ||
+        (direction->initialized!=0 && direction->initialized!=1) ||
+        !finite(direction->angle_degrees))) return 0;
     if(clip) {
         if((clip->alpha_lock!=0 && clip->alpha_lock!=1) ||
            (clip->selection_enabled!=0 && clip->selection_enabled!=1)) return 0;
@@ -179,10 +185,22 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     *dirty={0,0,0,0};
     const float dx=s.x1-s.x0,dy=s.y1-s.y0;
     const float distance=std::sqrt(dx*dx+dy*dy);
+    float nibAngle=0.0f;
+    if(direction && direction->follow_path) {
+        // The tangent remains stable if the pointer pauses or sends a
+        // stationary event. A new stroke falls back to the nib base angle.
+        if(distance>0.000001f) {
+            nibAngle=std::atan2(dy,dx)*57.29577951308232f;
+            direction->angle_degrees=nibAngle;
+            direction->initialized=1;
+        } else if(direction->initialized) {
+            nibAngle=direction->angle_degrees;
+        }
+    }
     const float step=std::max(0.75f,s.diameter*s.spacing);
 
     if (!state->initialized) {
-        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip,mask,flow,pressureOpacity,clip);
+        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip,mask,flow,pressureOpacity,clip,nibAngle);
         state->initialized=1;
         state->distance_to_next=step;
     }
@@ -194,7 +212,7 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     while(travel<=distance+0.00001f) {
         const float t=std::min(1.0f,travel/distance);
         dab(s,s.x0+dx*t,s.y0+dy*t,
-            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip,mask,flow,pressureOpacity,clip);
+            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip,mask,flow,pressureOpacity,clip,nibAngle);
         travel+=step;
     }
     state->distance_to_next=travel-distance;
@@ -203,26 +221,35 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
 
 extern "C" int32_t inkora_core_stroke_v2(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty) {
-    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f,nullptr);
+    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v3(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip) {
-    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f,nullptr);
+    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v4(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip,const InkoraMask* mask,float flow,float pressureOpacity) {
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v6(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip,const InkoraMask* mask,float flow,
     float pressureOpacity,const InkoraPaintClip* clip) {
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,nullptr);
+}
+
+extern "C" int32_t inkora_core_stroke_v8(
+    const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
+    const InkoraTip* tip,const InkoraMask* mask,float flow,
+    float pressureOpacity,const InkoraPaintClip* clip,
+    InkoraBrushDirection* direction) {
+    if(!direction) return 0;
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,direction);
 }
 
 extern "C" int32_t inkora_core_stroke(const InkoraStroke* src) {

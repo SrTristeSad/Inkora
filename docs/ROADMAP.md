@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v7 com composição por máscaras RGBA e clipping pela camada-base; aguarda CI** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v7, blend, máscara de camada e clipping** |
+| Motor gráfico Inkora em C++ | **C++ ABI v8: orientação de pontas chatas/PNG pela tangente da trajetória; validar CI** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v8, estado direcional por segmento, blend, máscaras e clipping** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
@@ -27,6 +27,8 @@
 ### Fase 2 — Motor de pintura
 - [ ] Pincéis profissionais: interpolação avançada, textura contínua, tinta úmida, estabilização profissional completa e pressão Windows Ink/WinTab.
 - [x] Primeiro estabilizador adaptativo à taxa de eventos e à velocidade do cursor (filtro de baixa passagem variável), com conclusão amostrada do traço e cursor/traço suavizado visível.
+- [x] C++ v8: orientação dinâmica da ponta chata e PNG ao seguir o traço, ângulo fixo configurável e estado preservado entre tiles/eventos.
+- [x] Salvar e restaurar ângulo e modo de direção em presets, mantendo leitura de configurações antigas.
 - [x] A prévia em C++ também simula estabilização; teste puro Lua para variação de taxa/tremor e teste gráfico integrado ao C++.
 - [x] Ponta personalizada por PNG até 512×512, máscara alfa (ou luminância invertida), com armazenamento local.
 - [x] Fluxo básico por carimbo e dinâmica linear de opacidade conforme pressão, via C++ ABI v4.

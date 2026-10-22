@@ -12,6 +12,7 @@ local Viewport = require("src.viewport")
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
     brushHardness=0.82, brushSpacing=0.18, brushTip=0,
+    brushAngle=25, brushFollowPath=false,
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
     presetId="ink", profiles={},
     fillTolerance=0.02, colorIndex=1, color=palette[1],
@@ -239,7 +240,8 @@ function app:strokeStart(x,y,pressure)
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
         tip=self.brushTip,aspect=0.3,
-        angle=self.brushTip==3 and 0 or 25,grain=0.85,seed=239,
+        angle=self.brushAngle,followPath=self.brushFollowPath,
+        grain=0.85,seed=239,
         mask=self.brushTip==3 and self.tipMask or nil,
         flow=self.brushFlow,pressureOpacity=self.pressureOpacity,
         alphaLock=layer.alphaLock,selection=self.doc.selection,

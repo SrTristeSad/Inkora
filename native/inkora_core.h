@@ -108,6 +108,21 @@ INKORA_API int32_t inkora_core_blend_layer_v7(
     int32_t width, int32_t height, float opacity, int32_t blend_mode,
     const InkoraLayerEffects *effects);
 
+// ABI v8: nib direction follows the tangent of each stroke segment when
+// follow_path=1. angle_degrees persists across mouse events, and is
+// reproduced for every tile. Legacy v6 brushes retain a fixed tip angle.
+typedef struct InkoraBrushDirection {
+    int32_t follow_path;
+    int32_t initialized;
+    float angle_degrees;
+} InkoraBrushDirection;
+
+INKORA_API int32_t inkora_core_stroke_v8(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow,
+    float pressure_opacity, const InkoraPaintClip *clip,
+    InkoraBrushDirection *direction);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

@@ -42,6 +42,11 @@ if ffiOK then
         int32_t alpha_lock, selection_enabled;
         int32_t left, top, right, bottom;
     } InkoraPaintClip;
+    typedef struct InkoraBrushDirection {
+        int32_t follow_path;
+        int32_t initialized;
+        float angle_degrees;
+    } InkoraBrushDirection;
     typedef struct InkoraLayerEffects {
         const uint8_t *mask_rgba;
         uint64_t mask_bytes;
@@ -65,10 +70,10 @@ if ffiOK then
         int32_t width, int32_t height, float opacity, int32_t blend_mode,
         const InkoraLayerEffects *effects);
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v6(const InkoraStroke *stroke,
+    int32_t inkora_core_stroke_v8(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
         const InkoraMask *mask, float flow, float pressure_opacity,
-        const InkoraPaintClip *clip);
+        const InkoraPaintClip *clip, InkoraBrushDirection *direction);
     ]]
 end
 
@@ -100,11 +105,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==7 then
+            if vok and version==8 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v7)"
+            Native.error="ABI C++ incompativel (requer v8)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -221,11 +226,12 @@ function Native.beginStroke(canvas,settings)
         layerCaches[canvas]=cache
     end
     return {cache=cache,canvas=canvas,settings=settings or {},
-        state=ffi.new("InkoraStrokeState[1]")}
+        state=ffi.new("InkoraStrokeState[1]"),
+        direction=ffi.new("InkoraBrushDirection[1]")}
 end
 
 local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
-                         eraser,pressure0,pressure1,originalState)
+                         eraser,pressure0,pressure1,originalState,originalDirection)
     local stroke=ffi.new("InkoraStroke[1]")
     local s=stroke[0]
     s.pixels=ffi.cast("uint8_t*",tile.data:getFFIPointer())
@@ -241,7 +247,7 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     local tip=ffi.new("InkoraTip[1]")
     tip[0].tip=(session.settings.tip==3) and 0 or (session.settings.tip or 0)
     tip[0].aspect=session.settings.aspect or 0.30
-    tip[0].angle=session.settings.angle or 25
+    tip[0].angle=session.settings.angle or 0
     tip[0].grain=session.settings.grain or 0.85
     tip[0].seed=session.settings.seed or 239
     tip[0].origin_x=tile.x
@@ -269,15 +275,22 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     local localState=ffi.new("InkoraStrokeState[1]")
     localState[0].distance_to_next=originalState.distance_to_next
     localState[0].initialized=originalState.initialized
+    local direction=ffi.new("InkoraBrushDirection[1]")
+    direction[0].follow_path=session.settings.followPath and 1 or 0
+    direction[0].initialized=originalDirection.initialized
+    direction[0].angle_degrees=originalDirection.angle_degrees
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v6(stroke,localState,dirty,tip,mask,
-            session.settings.flow or 1,session.settings.pressureOpacity or 0,clip)~=1 then
+    if Native.library.inkora_core_stroke_v8(stroke,localState,dirty,tip,mask,
+            session.settings.flow or 1,session.settings.pressureOpacity or 0,
+            clip,direction)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),
         width=tonumber(dirty[0].width),height=tonumber(dirty[0].height)},
         {distance_to_next=tonumber(localState[0].distance_to_next),
-         initialized=tonumber(localState[0].initialized)}
+         initialized=tonumber(localState[0].initialized)},
+        {angle_degrees=tonumber(direction[0].angle_degrees),
+         initialized=tonumber(direction[0].initialized)}
 end
 
 local function updateTile(session,tile,r)
@@ -308,16 +321,16 @@ local function union(a,b)
 end
 
 local function advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
-                            eraser,pressure0,pressure1,originalState)
+                            eraser,pressure0,pressure1,originalState,originalDirection)
     -- Sem tiles visiveis: avance a fase de spacing via um bitmap descartavel.
     local empty={x=-10000,y=-10000,w=1,h=1,data=session.dummy}
     if not empty.data then
         session.dummy=love.image.newImageData(1,1,"rgba8")
         empty.data=session.dummy
     end
-    local _,updated=paintTile(session,empty,x0,y0,x1,y1,color,diameter,opacity,
-        eraser,pressure0,pressure1,originalState)
-    return updated
+    local _,updated,updatedDirection=paintTile(session,empty,x0,y0,x1,y1,color,diameter,opacity,
+        eraser,pressure0,pressure1,originalState,originalDirection)
+    return updated,updatedDirection
 end
 
 function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressure0,pressure1)
@@ -330,6 +343,11 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
     local bottom=math.min(cache.height-1,math.ceil(math.max(y0,y1)+radius))
     local old=session.state[0]
     local initial={distance_to_next=old.distance_to_next,initialized=old.initialized}
+    local direction=session.direction[0]
+    local originalDirection={
+        initialized=direction.initialized,angle_degrees=direction.angle_degrees
+    }
+    local newDirection=nil
     local newState=nil
     local bounds=nil
     local pixels=0
@@ -338,9 +356,10 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
         for ty=math.floor(top/TILE_SIZE),math.floor(bottom/TILE_SIZE) do
             for tx=math.floor(left/TILE_SIZE),math.floor(right/TILE_SIZE) do
                 local tile=getTile(cache,session.canvas,tx,ty)
-                local dirty,state=paintTile(session,tile,x0,y0,x1,y1,color,diameter,
-                    opacity,eraser,pressure0,pressure1,initial)
+                local dirty,state,turned=paintTile(session,tile,x0,y0,x1,y1,color,diameter,
+                    opacity,eraser,pressure0,pressure1,initial,originalDirection)
                 newState=state
+                newDirection=turned
                 if dirty.width>0 and dirty.height>0 then
                     local updated=updateTile(session,tile,dirty)
                     bounds=union(bounds,updated)
@@ -350,11 +369,13 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
         end
     end
     if not newState then
-        newState=advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
-            eraser,pressure0,pressure1,initial)
+        newState,newDirection=advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
+            eraser,pressure0,pressure1,initial,originalDirection)
     end
     session.state[0].distance_to_next=newState.distance_to_next
     session.state[0].initialized=newState.initialized
+    session.direction[0].angle_degrees=newDirection.angle_degrees
+    session.direction[0].initialized=newDirection.initialized
 
     Native.lastUpload=bounds or {x=0,y=0,width=0,height=0}
     Native.lastUpload.pixels=pixels

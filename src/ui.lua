@@ -545,7 +545,7 @@ function UI:drawSettings(app,x,w,h)
         {"Opacidade",app.brushOpacity,function(v)
             app.brushOpacity=math.max(0.03,v)
         end,tostring(math.floor(app.brushOpacity*100+0.5)).."%"},
-        {"Fluxo por carimbo",app.brushFlow,function(v)
+        {"Fluxo",app.brushFlow,function(v)
             app.brushFlow=math.max(0.01,v)
         end,tostring(math.floor(app.brushFlow*100+0.5)).."%"},
         {"Dureza",app.brushHardness,function(v) app.brushHardness=v end,
@@ -553,41 +553,49 @@ function UI:drawSettings(app,x,w,h)
         {"Espacamento",(app.brushSpacing-0.03)/0.47,function(v)
             app.brushSpacing=0.03+v*0.47
         end,tostring(math.floor(app.brushSpacing*100+0.5)).."%"},
-        {"Estabilizacao adaptativa",app.stabilization,function(v)
+        {"Estabilizacao",app.stabilization,function(v)
             app.stabilization=v
         end,tostring(math.floor(app.stabilization*100+0.5)).."%"},
         {"Pressao na opacidade",app.pressureOpacity,function(v)
             app.pressureOpacity=v
         end,tostring(math.floor(app.pressureOpacity*100+0.5)).."%"},
+        {"Angulo da ponta",app.brushAngle/180,function(v)
+            app.brushAngle=math.floor(180*v+0.5)
+        end,tostring(app.brushAngle).."°"},
     }
     for i,c in ipairs(controls) do
-        self:slider(x+10,220+(i-1)*45,w-22,c[2],c[1],c[3],c[4])
+        self:slider(x+10,220+(i-1)*33,w-22,c[2],c[1],c[3],c[4])
     end
-    self:print("PREVIA AO VIVO - MOTOR C++",x,522,C.white,self.small)
-    self:rect(x+5,542,w-10,56,C.surface,8)
-    local preview=BrushPreview.getLive(app)
-    if preview then
-        local iw,ih=preview:getDimensions()
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.draw(preview,x+12,548,0,(w-24)/iw,44/ih)
-    else
-        self:print("Motor C++ indisponivel",x+17,563,C.muted,self.small,w-34)
-    end
-    self:button(x+4,611,(w-14)/2,31,"Salvar preset",function()
-        app:saveBrushProfile()
-    end,"primary")
-    self:button(x+10+(w-14)/2,611,(w-14)/2,31,"Restaurar",function()
-        app:resetBrushProfile()
-    end)
-    self:print("PONTA DO PINCEL",x,h-109,C.muted,self.small)
+    self:button(x+4,483,w-8,31,
+        app.brushFollowPath and "Ponta acompanha o traco: SIM"
+            or "Ponta acompanha o traco: NAO",function()
+        app.brushFollowPath=not app.brushFollowPath
+    end,app.brushFollowPath and "primary" or nil)
+    self:print("FORMATO DA PONTA",x,522,C.muted,self.small)
     for i,item in ipairs({{"Red.",0},{"Chata",1},{"Grao",2},{"PNG",3}}) do
         local bx=x+(i-1)*(w/4)
-        self:button(bx,h-85,w/4-7,30,item[1],function()
+        self:button(bx,540,w/4-7,30,item[1],function()
             if item[2]==3 and not app.tipMask then
                 app:statusMessage("Shift + arraste PNG para criar a ponta")
             else app.brushTip=item[2];app.tool="brush" end
         end,app.brushTip==item[2] and "primary" or nil)
     end
+    self:print("PREVIA DIRECIONAL - MOTOR C++",x,582,C.white,self.small)
+    self:rect(x+5,600,w-10,48,C.surface,8)
+    local preview=BrushPreview.getLive(app)
+    if preview then
+        local iw,ih=preview:getDimensions()
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(preview,x+12,602,0,(w-24)/iw,43/ih)
+    else
+        self:print("Motor C++ indisponivel",x+17,615,C.muted,self.small,w-34)
+    end
+    self:button(x+4,657,(w-14)/2,31,"Salvar preset",function()
+        app:saveBrushProfile()
+    end,"primary")
+    self:button(x+10+(w-14)/2,657,(w-14)/2,31,"Restaurar",function()
+        app:resetBrushProfile()
+    end)
 end
 
 function UI:drawColorPanel(app,x,w,h)

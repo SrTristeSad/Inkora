@@ -16,6 +16,7 @@ local function signature(style,mask,ink)
         tostring(style.spacing),tostring(style.opacity),
         tostring(style.flow),tostring(style.pressureOpacity),
         tostring(style.stabilization or 0),
+        tostring(style.angle or 0),tostring(style.followPath or false),
         mask and tostring(mask.buffer) or "nomask",
         string.format("%.4f,%.4f,%.4f",
             ink[1] or 0,ink[2] or 0,ink[3] or 0)
@@ -31,7 +32,8 @@ local function render(style,mask,ink)
     Native.registerBlank(canvas)
     local session=Brush.beginStroke(canvas,{
         hardness=style.hardness,spacing=style.spacing,
-        tip=style.tip,aspect=0.3,angle=style.tip==3 and 0 or 25,
+        tip=style.tip,aspect=0.3,angle=style.angle or 0,
+        followPath=style.followPath or false,
         grain=0.85,seed=239,
         mask=style.tip==3 and mask or nil,
         flow=style.flow,pressureOpacity=style.pressureOpacity,
@@ -90,7 +92,8 @@ function Preview.getLive(app)
         spacing=app.brushSpacing,opacity=app.brushOpacity,
         flow=app.brushFlow,pressureOpacity=app.pressureOpacity,
         stabilization=app.stabilization,
-        tip=app.brushTip,
+        tip=app.brushTip,angle=app.brushAngle,
+        followPath=app.brushFollowPath,
     }
     local mask=style.tip==3 and app.tipMask or nil
     if style.tip==3 and not mask then return nil end

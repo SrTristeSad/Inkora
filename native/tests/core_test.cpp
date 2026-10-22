@@ -4,6 +4,7 @@
 #endif
 #include <cassert>
 #include <cstdint>
+#include <cmath>
 #include <cstring>
 #include <vector>
 #include <iostream>
@@ -20,7 +21,7 @@ static uint8_t px(const std::vector<uint8_t>& image,int x,int y,int c) {
     return image[(y*W+x)*4+c];
 }
 int main() {
-    assert(inkora_core_api_version()==7);
+    assert(inkora_core_api_version()==8);
     std::vector<uint8_t> data(W*H*4,0);
     auto s=sample(data);
     InkoraStrokeState state{0,0};
@@ -144,6 +145,65 @@ int main() {
     zp.pressure0=zp.pressure1=1;cs={0,0};
     assert(inkora_core_stroke_v4(&zp,&cs,&region,&customTip,nullptr,1,1));
     assert(px(zeroPressure,100,70,3)>220);
+    // ABI v8: flat nib follows the stroke tangent across mouse events.
+    std::vector<uint8_t> orientedX(W*H*4,0),orientedY(W*H*4,0);
+    auto tangentX=sample(orientedX),tangentY=sample(orientedY);
+    tangentX.x0=120.5f;tangentX.y0=65.5f;
+    tangentX.x1=121.5f;tangentX.y1=65.5f;
+    tangentY.x0=120.5f;tangentY.y0=65.5f;
+    tangentY.x1=120.5f;tangentY.y1=66.5f;
+    tangentX.diameter=tangentY.diameter=24;
+    tangentX.spacing=tangentY.spacing=1;
+    InkoraTip calligraphy{1,0.18f,0.0f,0.0f,1u,0,0};
+    InkoraStrokeState orientationStateX{0,0},orientationStateY{0,0};
+    InkoraBrushDirection directionX{1,0,0},directionY{1,0,0};
+    assert(inkora_core_stroke_v8(&tangentX,&orientationStateX,&region,
+        &calligraphy,nullptr,1,0,nullptr,&directionX)==1);
+    assert(inkora_core_stroke_v8(&tangentY,&orientationStateY,&region,
+        &calligraphy,nullptr,1,0,nullptr,&directionY)==1);
+    assert(px(orientedX,128,65,3)>200 && px(orientedX,120,73,3)==0);
+    assert(px(orientedY,128,65,3)==0 && px(orientedY,120,73,3)>200);
+    assert(directionX.initialized==1 && directionY.initialized==1);
+    assert(std::abs(directionY.angle_degrees-90.0f)<0.1f);
+    tangentY.x0=tangentY.x1;tangentY.y0=tangentY.y1;
+    assert(inkora_core_stroke_v8(&tangentY,&orientationStateY,&region,
+        &calligraphy,nullptr,1,0,nullptr,&directionY)==1);
+    assert(std::abs(directionY.angle_degrees-90.0f)<0.1f);
+
+    // Original C++ v6 preserves fixed nib angle with the same segment.
+    std::vector<uint8_t> legacy(W*H*4,0);
+    auto fixed=sample(legacy);fixed.x0=fixed.x1=120.5f;
+    fixed.y0=fixed.y1=65.5f;fixed.diameter=24;
+    InkoraStrokeState fixedState{0,0};
+    assert(inkora_core_stroke_v6(&fixed,&fixedState,&region,&calligraphy,
+        nullptr,1,0,nullptr)==1);
+    assert(px(legacy,128,65,3)>200 && px(legacy,120,73,3)==0);
+
+    // Path orientation also rotates asymmetric user-owned bitmap masks.
+    std::vector<uint8_t> asymmetric{255,255,0,0};
+    InkoraMask customNib{asymmetric.data(),2,2,2,4};
+    std::vector<uint8_t> orientedMask(W*H*4,0);
+    auto maskStroke=sample(orientedMask);
+    maskStroke.x0=120.5f;maskStroke.y0=65.5f;
+    maskStroke.x1=120.5f;maskStroke.y1=66.5f;
+    maskStroke.diameter=24;maskStroke.spacing=1;
+    InkoraBrushDirection directionMask{1,0,0};
+    InkoraStrokeState maskState{0,0};
+    assert(inkora_core_stroke_v8(&maskStroke,&maskState,&region,&calligraphy,
+        &customNib,1,0,nullptr,&directionMask)==1);
+    assert(px(orientedMask,128,65,3)>200 && px(orientedMask,112,65,3)==0);
+
+    // Invalid rotation metadata is rejected, with no buffer access.
+    directionMask.follow_path=2;
+    assert(!inkora_core_stroke_v8(&maskStroke,&maskState,&region,&calligraphy,
+        nullptr,1,0,nullptr,&directionMask));
+    directionMask.follow_path=1;directionMask.initialized=2;
+    assert(!inkora_core_stroke_v8(&maskStroke,&maskState,&region,&calligraphy,
+        nullptr,1,0,nullptr,&directionMask));
+    directionMask.initialized=1;directionMask.angle_degrees=NAN;
+    assert(!inkora_core_stroke_v8(&maskStroke,&maskState,&region,&calligraphy,
+        nullptr,1,0,nullptr,&directionMask));
+    std::cout<<"INKORA_CPP_DIRECTIONAL_BRUSH_OK\n";
     std::cout<<"INKORA_CPP_MASK_FLOW_PRESSURE_OK\n";
     std::cout<<"INKORA_CPP_DIRTY_STROKE_OK\n";
 }

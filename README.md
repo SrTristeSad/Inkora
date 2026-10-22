@@ -4,7 +4,7 @@
 
 > **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
 
-> **Situação atual:** existe um **motor raster C++ v7 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. Esta atualização introduz a **primeira reformulação visual do desktop Inkora**, com biblioteca de presets de pincel, seletor de cores HSV e miniaturas de camadas. **Não** é ainda um editor profissional equivalente ao ibisPaint; os recursos da interface estão sendo aproximados progressivamente do fluxo de trabalho de pintura digital. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
+> **Situação atual:** existe um **motor raster C++ v8 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. Esta atualização introduz a **primeira reformulação visual do desktop Inkora**, com biblioteca de presets de pincel, seletor de cores HSV e miniaturas de camadas. **Não** é ainda um editor profissional equivalente ao ibisPaint; os recursos da interface estão sendo aproximados progressivamente do fluxo de trabalho de pintura digital. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
@@ -33,6 +33,7 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 - Oito presets iniciais independentes: Nanquim, Lápis, Marcador, Aerógrafo, Giz, Pincel macio, Pixel e Ponta PNG. Cada preset altera parâmetros **reais** do motor de pintura C++, como ponta, fluxo, espaçamento, dureza, tamanho e opacidade.
 - **Prévia gerada pelo motor C++**: as miniaturas da biblioteca são rasterizadas de verdade, com a ponta e dinâmica de cada preset, uma única vez e guardadas em cache (não são desenhos artificiais feitos pela interface). O tamanho na miniatura é adaptado ao espaço visual.
 - **Prévia ao vivo na aba Ajustes**: alterar tamanho, opacidade, fluxo, dureza, espaçamento, ponta, influência da pressão **ou estabilização adaptativa** atualiza um traço de teste feito pelo motor C++ e pela cor selecionada. Apenas a última prévia dinâmica permanece em memória; mover os controles não modifica o desenho.
+- **Pontas direcionais (C++ v8):** pontas chatas e máscaras PNG usam um ângulo fixo ou giram conforme a **direção do movimento**. A aba Ajustes oferece o ângulo de 0° a 180° e a opção **Ponta acompanha o traço**. O preset Marcador ativa essa opção inicialmente; os demais preservam seus ângulos fixos. O motor preserva o estado direcional entre eventos e tiles e mantém APIs antigas disponíveis.
 - **Traços com estabilização adaptativa ao tempo**: a suavização leva em conta o intervalo dos eventos e a velocidade do ponteiro, atenuando tremores de baixa velocidade sem atrasar tanto movimentos rápidos. O fim do traço é concluído por segmentos progressivos, preservando o espaçamento do C++ entre carimbos. Durante o desenho estabilizado, um marcador azul indica onde o pincel suavizado está, ligado ao cursor por uma linha discreta. Não há ainda estabilização profissional equivalente à do ibisPaint nem integração Windows Ink/WinTab.
 - **Presets editáveis e persistentes**: use **Salvar preset** para conservar as configurações do pincel selecionado e **Restaurar** para voltar à configuração de fábrica. Os ajustes ficam em `brush-profiles-v1.txt` no diretório do Inkora. Um ponto ao lado do nome identifica presets personalizados. A prévia de cada cartão também passa a refletir as configurações salvas.
 - **Categorias e favoritos combináveis:** navegue entre Todos, Tinta, Esboço, Pintura, Textura, Precisão e Sua biblioteca, mantendo o filtro de favoritos quando desejar.
@@ -94,7 +95,7 @@ Os projetos e PNGs são gravados no diretório de dados do LÖVE, usando a ident
 - `projects/` — projetos editáveis, com manifesto e PNGs de cada camada.
 - `exports/` — imagens PNG exportadas.
 - `brush-favorites.txt` — preferências de pincéis favoritos.
-- `brush-profiles-v1.txt` — ajustes personalizados dos oito presets, salvos localmente. As entradas são verificadas antes da leitura; valores inválidos são ignorados.
+- `brush-profiles-v1.txt` — ajustes personalizados dos oito presets, incluindo ângulo e direção. Entradas antigas com oito parâmetros continuam aceitas; valores inválidos são ignorados.
 
 Os caminhos podem ser consultados na pasta de dados do Inkora. O rodapé mostra o documento, a ferramenta e o zoom. O sistema ainda **não** tem diálogo nativo “Salvar como”.
 
@@ -142,7 +143,7 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 **Motor implementado inicialmente:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
 
-**Próxima prioridade:** permitir pintar diretamente nas máscaras de camada, seleção elíptica e laço, grupos/clipping em cadeia, composição por tiles e pressão Windows Ink/WinTab. Pressão funciona no motor e em eventos de toque que a reportem; mouse comum permanece a 100%.
+**Próxima prioridade:** integrar pressão real Windows Ink/WinTab, textura contínua e rotação por inclinação de caneta, além de máscaras editáveis, seleção por laço e desempenho por tiles. Pressão funciona no motor e em eventos de toque que a reportem; mouse comum permanece a 100%.
 
 ## Limitações atuais e próximos passos
 

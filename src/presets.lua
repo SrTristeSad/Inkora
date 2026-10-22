@@ -9,7 +9,7 @@ local Presets={
      pressureOpacity=0.8,preview="pencil"},
     {id="marker",name="Marcador",family="Tinta",size=28,hardness=1,
      spacing=0.10,opacity=0.65,flow=0.8,stabilization=0.10,tip=1,
-     pressureOpacity=0.25,preview="flat"},
+     pressureOpacity=0.25,angle=0,followPath=true,preview="flat"},
     {id="soft",name="Aerografo",family="Pintura",size=55,hardness=0.08,
      spacing=0.07,opacity=0.42,flow=0.18,stabilization=0.24,tip=0,
      pressureOpacity=0.6,preview="soft"},
@@ -26,6 +26,13 @@ local Presets={
      hardness=1,spacing=0.12,opacity=1,flow=0.8,stabilization=0.2,
      tip=3,pressureOpacity=0.5,preview="custom"},
 }
+-- Fixed-angle brushes preserve the original behavior. The marker uses
+-- direction-following by default so the improvement is visible immediately.
+for _,preset in ipairs(Presets) do
+    if preset.angle==nil then preset.angle=0 end
+    if preset.followPath==nil then preset.followPath=false end
+end
+
 function Presets.find(id)
     for _,p in ipairs(Presets) do if p.id==id then return p end end
     return nil
