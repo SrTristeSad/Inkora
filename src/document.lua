@@ -729,6 +729,24 @@ local function pngBytes(canvas)
     return canvas:newImageData():encode("png"):getString()
 end
 
+-- Save one small gallery thumbnail independently of the editable layers.
+-- Legacy projects without thumbnails keep loading as before.
+function Document:saveGalleryPreview(root)
+    local tw,th=320,208
+    local image=love.graphics.newCanvas(tw,th,{format="rgba8"})
+    love.graphics.push("all")
+    love.graphics.setCanvas(image)
+    love.graphics.clear(0.94,0.95,0.97,1)
+    local scale=math.min((tw-24)/self.width,(th-24)/self.height)
+    local x=(tw-self.width*scale)/2
+    local y=(th-self.height*scale)/2
+    self:draw(x,y,scale)
+    love.graphics.pop()
+    local bytes=pngBytes(image)
+    image:release()
+    assert(love.filesystem.write(root.."/preview.png",bytes))
+end
+
 function Document:save(name)
     self.name = cleanText(name or self.name)
     if self.name == "" then self.name = "Sem titulo" end
@@ -757,6 +775,11 @@ function Document:save(name)
         }, "\t")
     end
     assert(love.filesystem.write(root .. "/manifest.txt", table.concat(manifest, "\n") .. "\n"))
+    -- Thumbnail failure does not corrupt or invalidate the project itself.
+    local previewOK,previewError=pcall(self.saveGalleryPreview,self,root)
+    if not previewOK then
+        print("INKORA_PREVIEW_WARNING "..tostring(previewError))
+    end
     self.dirty = false
     return love.filesystem.getSaveDirectory() .. "/" .. root
 end
@@ -775,11 +798,21 @@ function Document.listProjects()
             local s = love.filesystem.read("projects/" .. key .. "/manifest.txt")
             if s and s:match("^INKORA1\n") then
                 local name = s:match("\nname\t([^\r\n]+)") or key
-                projects[#projects + 1] = {key = key, name = name}
+                local width,height=s:match("\nsize\t(%d+)\t(%d+)")
+                local picture="projects/"..key.."/preview.png"
+                local info=love.filesystem.getInfo("projects/"..key.."/manifest.txt")
+                projects[#projects + 1] = {
+                    key=key,name=name,width=tonumber(width),height=tonumber(height),
+                    preview=love.filesystem.getInfo(picture,"file") and picture or nil,
+                    updated=info and info.modtime or 0,
+                }
             end
         end
     end
-    table.sort(projects, function(a, b) return a.key > b.key end)
+    table.sort(projects,function(a,b)
+        if a.updated~=b.updated then return a.updated>b.updated end
+        return a.key>b.key
+    end)
     return projects
 end
 

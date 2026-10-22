@@ -275,11 +275,11 @@ function Startup:drawCreate(app,w,h)
     end
     local right=left+listWidth+38
     local rw=w-right-54
-    drawRect(right,top,rw,419,C.panel,15)
+    drawRect(right,top,rw,248,C.panel,15)
     self:label("PREVIA DA TELA",right+20,top+18,self.fonts.small,C.muted)
     local dw,dh=tonumber(self.draft.width),tonumber(self.draft.height)
     local frameX,frameY=right+36,top+54
-    local fw,fh=rw-72,300
+    local fw,fh=rw-72,160
     drawRect(frameX,frameY,fw,fh,C.deep,11)
     if dw and dh and dw>0 and dh>0 then
         local scale=math.min((fw-42)/dw,(fh-34)/dh)
@@ -288,8 +288,8 @@ function Startup:drawCreate(app,w,h)
         lineRect(frameX+(fw-aw)/2,frameY+(fh-ah)/2,aw,ah,C.stroke,2)
     end
     self:label((self.draft.width.." x "..self.draft.height.." px"),
-        right+20,top+372,self.fonts.body,C.light,rw-40,"center")
-    local controlsY=top+440
+        right+20,top+214,self.fonts.body,C.light,rw-40,"center")
+    local controlsY=top+279
     self:label("Largura (px)",right,controlsY,self.fonts.small,C.muted)
     self:label("Altura (px)",right+rw/2+7,controlsY,self.fonts.small,C.muted)
     for _,spec in ipairs({{"width",right},{"height",right+rw/2+7}}) do
@@ -308,7 +308,7 @@ function Startup:drawCreate(app,w,h)
         self.draft.width,self.draft.height=self.draft.height,self.draft.width
         self.draft.preset=nil
     end)
-    local nameY=controlsY+137
+    local nameY=controlsY+126
     self:label("Nome do trabalho",right,nameY,self.fonts.small,C.muted)
     drawRect(right,nameY+20,rw,42,self.draft.focus=="name" and C.raised or C.panel,8)
     lineRect(right,nameY+20,rw,42,self.draft.focus=="name" and C.accent or C.stroke,8)
@@ -316,9 +316,9 @@ function Startup:drawCreate(app,w,h)
         right+12,nameY+31,self.fonts.body,C.light,rw-24)
     self:hit(right,nameY+20,rw,42,"focus-name",function()self.draft.focus="name"end)
     if self.error then self:label(self.error,right,nameY+69,self.fonts.small,C.gold,rw) end
-    self:button("Criar tela e desenhar",right,math.min(h-75,nameY+89),
+    self:button("Criar tela e desenhar",right,math.min(h-75,nameY+87),
         rw,48,"create-artwork",function()self:submit(app)end,true)
-    self:label("Tela maxima de 4096 x 4096 pixels",
+    self:label("Tamanhos ate 4096 x 4096 pixels",
         54,h-30,self.fonts.small,C.muted)
 end
 function Startup:draw(app)
