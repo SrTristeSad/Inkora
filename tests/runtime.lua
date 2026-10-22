@@ -1588,9 +1588,9 @@ local function run(app)
             be32((4294967296-(#payload+8))%4294967296)
     end
     local head=record(0x100,0x100,
-        string.rep("\\0",8)..be32(64)..be32(64))
+        string.rep("\0",8)..be32(64)..be32(64))
     local snap=record(0x100,0x500,
-        string.rep("\\0",8)..be32(0xffffffff)..be32(0)..
+        string.rep("\0",8)..be32(0xffffffff)..be32(0)..
         be16(0)..be32(#bytes)..bytes)
     local ipvBytes=head..snap
     local mockIPV={
