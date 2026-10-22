@@ -1,8 +1,12 @@
 # Inkora 🎨
 
-**Inkora** é um editor de pintura digital em desenvolvimento, com foco inicial em **Windows / PC**, construído em **Lua + LÖVE** e planejado para ter um núcleo compartilhado com uma versão futura para Android.
+**Inkora** é um projeto de **engenharia reversa funcional do ibisPaint**: reconstruir progressivamente suas ferramentas e o comportamento de pintura, com **código, identidade e recursos próprios**, usando **Lua + C++**. **Windows/PC primeiro; Android depois, sobre o mesmo núcleo.**
 
-> **Estado atual: protótipo inicial (MVP).** Não é um clone completo do ibisPaint. O programa e suas ferramentas estão sendo implementados de forma independente.
+> **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
+
+> **Situação real:** a versão existente é apenas um protótipo **Lua/LÖVE**. Ainda **não** há motor C++ próprio, ponte Lua ↔ C++ nem reconstrução comprovada do comportamento do ibisPaint. A prioridade seguinte é corrigir essa arquitetura, não maquiar o MVP.
+
+**Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
 ## Executar no PC
 
@@ -88,6 +92,10 @@ Inkora/
 - [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) — editor Android baseado no motor do Krita, **GPL-3.0**.
 
 A **primeira implementação não incorpora código, pincéis, gráficos ou bibliotecas desses projetos**. São referências de pesquisa e de funcionalidades. A eventual incorporação de código do ReveriePaint/Krita exigirá respeitar a GPL-3.0 e reavaliar as condições de distribuição do Inkora.
+
+## Rumo ao motor Lua + C++
+
+**Próxima entrega prioritária:** auditoria técnica das duas bases, matriz comparativa de comportamentos do ibisPaint, compilação de um módulo gráfico em C++ e integração Lua ↔ C++ comprovada por testes no Windows. Veja o [roadmap vinculante](docs/ROADMAP.md).
 
 ## Limitações atuais e próximos passos
 
