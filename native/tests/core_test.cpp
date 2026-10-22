@@ -1,4 +1,7 @@
 #include "../inkora_core.h"
+#ifdef NDEBUG
+#undef NDEBUG // Keep all brush regression assertions in Release builds.
+#endif
 #include <cassert>
 #include <cstdint>
 #include <cstring>
