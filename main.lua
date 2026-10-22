@@ -638,21 +638,8 @@ function love.draw()
     love.graphics.setColor(0.05,0.07,0.11,0.26)
     love.graphics.rectangle("fill",9,13,w,h)
     app.doc:draw(0,0,app.zoom)
-    if not app.doc.dirty and #app.doc.history==0 then
-        local centerX=w/2
-        local centerY=h/2
-        love.graphics.setColor(0.15,0.18,0.23,0.84)
-        local font=app.ui and app.ui.large or love.graphics.getFont()
-        love.graphics.setFont(font)
-        love.graphics.printf("Sua proxima arte comeca aqui",
-            centerX-200,centerY-25,400,"center")
-        if app.ui then
-            love.graphics.setFont(app.ui.small)
-            love.graphics.setColor(0.35,0.39,0.45,0.9)
-            love.graphics.printf("Escolha um pincel na biblioteca e comece a desenhar",
-                centerX-250,centerY+13,500,"center")
-        end
-    end
+    -- An empty canvas stays blank, as in ibisPaint. Do not overlay onboarding
+    -- text on the artist's actual pixels or the drawing workspace.
     love.graphics.setColor(0.60,0.68,0.77,0.55)
     love.graphics.rectangle("line",-0.5,-0.5,w+1,h+1)
 
@@ -918,8 +905,52 @@ function love.textinput(text)
     else app.ui:textinput(text) end
 end
 
+-- Import a dropped PNG as a REAL editable Inkora document while New is open.
+-- The original pixels become an ordinary layer and save to the active folder.
+function app:importGalleryPNG(file)
+    local previous=self.doc
+    local ok,err=pcall(function()
+        file:open("r")
+        local bytes=assert(file:read(),"Falha lendo PNG")
+        file:close()
+        assert(#bytes<=64*1024*1024,"Imagem excede 64 MB")
+        local data=love.image.newImageData(love.filesystem.newFileData(bytes,"artwork.png"))
+        local w,h=data:getDimensions()
+        assert(w>=1 and h>=1 and w<=4096 and h<=4096,
+            "Imagem deve ter no maximo 4096 x 4096 pixels")
+        local name=file:getFilename():gsub("\\\\","/"):match("([^/]+)%.%w+$") or "Imagem"
+        self:newDocument(w,h,name)
+        self.doc:importPNG(file)
+        self.doc:save(name)
+        if self.startup.galleryFolder~="" then
+            self.startup.folders:moveProjects({self.doc.projectKey},
+                self.startup.galleryFolder)
+        end
+    end)
+    if not ok then
+        self.doc=previous
+        self.startup.error=tostring(err)
+        return false
+    end
+    self.startup.galleryModal=nil
+    self.screen="editor"
+    self.dragging=nil
+    self.rotation=0
+    self:fitView()
+    self:statusMessage("PNG importado como obra editavel")
+    return true
+end
+
 function love.filedropped(file)
-    if app.screen~="editor" then return end
+    if app.screen~="editor" then
+        if (app.screen=="gallery" or app.screen=="home") and
+            file:getFilename():lower():match("%.png$") then
+            app:importGalleryPNG(file)
+        else
+            app.startup.error="Arraste uma imagem PNG para importar."
+        end
+        return
+    end
     if not file:getFilename():lower():match("%.png$") then
         app:statusMessage("Somente arquivos PNG podem ser importados.")
         return
