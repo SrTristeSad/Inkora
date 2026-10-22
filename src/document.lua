@@ -204,10 +204,37 @@ function Document:beginStrokeHistory()
     return entry
 end
 
-function Document:captureStrokeRegion(x0,y0,x1,y1,diameter,scatter)
+-- Capture an exact pixel rectangle once per 128x128 history tile.
+-- This is also used by native fill after determining its dirty bounds.
+function Document:captureHistoryRect(x,y,width,height)
     local entry=self.history[#self.history]
     if not entry or entry.kind~="stroke" or
         entry.layerIndex~=self.selected then return false end
+    local x0=math.max(0,math.floor(x))
+    local y0=math.max(0,math.floor(y))
+    local x1=math.min(self.width,math.ceil(x+width))
+    local y1=math.min(self.height,math.ceil(y+height))
+    if x1<=x0 or y1<=y0 then return false end
+    local canvas=self.layers[entry.layerIndex].canvas
+    local tilesWide=math.ceil(self.width/COMPOSITE_TILE)
+    for ty=math.floor(y0/COMPOSITE_TILE),math.floor((y1-1)/COMPOSITE_TILE) do
+        for tx=math.floor(x0/COMPOSITE_TILE),math.floor((x1-1)/COMPOSITE_TILE) do
+            local key=ty*tilesWide+tx
+            if not entry.tileKeys[key] then
+                local px,py,pw,ph=tileBounds(self,tx,ty)
+                entry.tiles[#entry.tiles+1]={
+                    x=px,y=py,w=pw,h=ph,
+                    data=captureTile(canvas,px,py,pw,ph)
+                }
+                entry.tileKeys[key]=true
+                entry.bytes=entry.bytes+pw*ph*4
+            end
+        end
+    end
+    return true
+end
+
+function Document:captureStrokeRegion(x0,y0,x1,y1,diameter,scatter)
     local radius=math.max(0.5,diameter*0.5)+
         diameter*0.4*(scatter or 0)+4
     local left=math.max(0,math.floor(math.min(x0,x1)-radius))
@@ -215,23 +242,7 @@ function Document:captureStrokeRegion(x0,y0,x1,y1,diameter,scatter)
     local right=math.min(self.width-1,math.ceil(math.max(x0,x1)+radius))
     local bottom=math.min(self.height-1,math.ceil(math.max(y0,y1)+radius))
     if right<left or bottom<top then return false end
-    local canvas=self.layers[entry.layerIndex].canvas
-    local tilesWide=math.ceil(self.width/COMPOSITE_TILE)
-    for ty=math.floor(top/COMPOSITE_TILE),math.floor(bottom/COMPOSITE_TILE) do
-        for tx=math.floor(left/COMPOSITE_TILE),math.floor(right/COMPOSITE_TILE) do
-            local key=ty*tilesWide+tx
-            if not entry.tileKeys[key] then
-                local x,y,w,h=tileBounds(self,tx,ty)
-                entry.tiles[#entry.tiles+1]={
-                    x=x,y=y,w=w,h=h,
-                    data=captureTile(canvas,x,y,w,h)
-                }
-                entry.tileKeys[key]=true
-                entry.bytes=entry.bytes+w*h*4
-            end
-        end
-    end
-    return true
+    return self:captureHistoryRect(left,top,right-left+1,bottom-top+1)
 end
 
 local function swapStrokeTiles(self,entry)
@@ -619,6 +630,35 @@ function Document:compositorStats()
         totalPixels=m.totalPixels,tileSize=COMPOSITE_TILE,
         buildTileSize=COMPOSITE_BUILD_TILE,lastBatches=m.lastBatches,
         peakRegionPixels=m.peakRegionPixels,regionReads=m.regionReads}
+end
+
+-- Upload a filled CPU rectangle without replacing the entire canvas.
+-- The undo entry captures only touched tiles and is compatible with COW.
+function Document:applyFillRegion(index,imageData,dirty)
+    assert(index==self.selected and self.layers[index],"Camada de preenchimento invalida")
+    assert(imageData:getWidth()==self.width and imageData:getHeight()==self.height,
+        "Dimensoes invalidas para preenchimento")
+    local x,y,w,h=dirty.x,dirty.y,dirty.width,dirty.height
+    assert(x>=0 and y>=0 and w>0 and h>0 and x+w<=self.width and y+h<=self.height,
+        "Retangulo de preenchimento invalido")
+    self:beginStrokeHistory()
+    self:ensureLayerWritable(index)
+    assert(self:captureHistoryRect(x,y,w,h))
+    local part=love.image.newImageData(w,h,"rgba8")
+    part:paste(imageData,0,0,x,y,w,h)
+    local upload=love.graphics.newImage(part)
+    local canvas=self.layers[index].canvas
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.setBlendMode("replace","premultiplied")
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(upload,x,y)
+    love.graphics.pop()
+    upload:release()
+    Native.invalidate(canvas)
+    self:markCompositeDirty(dirty)
+    self:trimHistory()
+    return true
 end
 
 -- Atualiza uma camada inteira como uma unica operacao de desfazer.

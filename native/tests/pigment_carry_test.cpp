@@ -51,7 +51,7 @@ static void stroke(Image& img,Paint& p,float x0,float x1,
         &wet,&p.carry)==1);
 }
 int main() {
-    assert(inkora_core_api_version()==12);
+    assert(inkora_core_api_version()==13);
     auto carried=makeImage(),normal=makeImage(),dry=makeImage();
     Paint brush{},ordinary{},legacy{};
     brush.carry.pickup=0.95f;brush.carry.retention=0.9f;

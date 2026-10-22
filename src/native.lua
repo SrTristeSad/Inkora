@@ -87,6 +87,15 @@ if ffiOK then
         const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
         int32_t width, int32_t height, float opacity, int32_t blend_mode,
         const InkoraLayerEffects *effects);
+    typedef struct InkoraFill {
+        uint8_t *pixels;
+        uint64_t buffer_bytes;
+        int32_t width,height,stride,x,y;
+        float r,g,b,tolerance;
+        int32_t alpha_lock,selection_enabled;
+        int32_t left,top,right,bottom;
+    } InkoraFill;
+    int32_t inkora_core_fill_v13(const InkoraFill *args,InkoraRect *dirty);
     int32_t inkora_core_api_version(void);
     int32_t inkora_core_dab_positions_v12(
         const InkoraStrokeState *state,
@@ -130,11 +139,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==12 then
+            if vok and version==13 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v12)"
+            Native.error="ABI C++ incompativel (requer v13)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -518,6 +527,36 @@ end
 -- options.mask, options.clip, options.clipMask are optional ImageData RGBA8.
 -- Mask coverage lives in the RED channel; clip uses the base layer ALPHA.
 -- Legacy calls without options retain precisely their old ABI behaviour.
+-- The GPU Canvas is read once upstream. This function operates on the
+-- original CPU ImageData pointer with no second full-size Lua allocation.
+function Native.fillImageData(data,x,y,color,tolerance,options)
+    if not Native.available() then return nil end
+    assert(data:getFormat()=="rgba8","Balde exige rgba8")
+    options=options or {}
+    local w,h=data:getDimensions()
+    local args=ffi.new("InkoraFill[1]")
+    args[0].pixels=ffi.cast("uint8_t*",data:getFFIPointer())
+    args[0].buffer_bytes=data:getSize()
+    args[0].width=w;args[0].height=h;args[0].stride=w*4
+    args[0].x=math.floor(x);args[0].y=math.floor(y)
+    args[0].r=color[1];args[0].g=color[2];args[0].b=color[3]
+    args[0].tolerance=math.max(0,math.min(1,tolerance or 0))
+    args[0].alpha_lock=options.alphaLock and 1 or 0
+    local sel=options.selection
+    if sel then
+        args[0].selection_enabled=1
+        args[0].left=sel.x0;args[0].top=sel.y0
+        args[0].right=sel.x1;args[0].bottom=sel.y1
+    end
+    local dirty=ffi.new("InkoraRect[1]")
+    if Native.library.inkora_core_fill_v13(args,dirty)~=1 then
+        error("Preenchimento C++ recusou parametros invalidos")
+    end
+    if dirty[0].width==0 or dirty[0].height==0 then return false,nil end
+    return true,{x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),
+        width=tonumber(dirty[0].width),height=tonumber(dirty[0].height)}
+end
+
 function Native.blendLayer(output,source,opacity,mode,options)
     assert(Native.available(),"Compositor C++ nao encontrado: "..tostring(Native.error))
     local w,h=output:getDimensions()

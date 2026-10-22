@@ -1,6 +1,7 @@
 -- Flood fill by horizontal spans, no recursion; applied to the active layer.
 -- Rectangle selection and alpha lock share the same semantics as C++ brush.
 local Fill={}
+local Native=require("src.native")
 
 local function near(r,g,b,a,tr,tg,tb,ta,tol)
     return math.abs(r-tr)<=tol and math.abs(g-tg)<=tol
@@ -13,6 +14,9 @@ function Fill.apply(data,x,y,rgb,tol,opts)
     local w,h=data:getDimensions()
     x,y=math.floor(x),math.floor(y)
     opts=opts or {}
+    if Native.available() and data.getFFIPointer then
+        return Native.fillImageData(data,x,y,rgb,tol,opts)
+    end
     local area=opts.selection
     local locked=opts.alphaLock==true
     local function allowed(px,py)
@@ -37,6 +41,7 @@ function Fill.apply(data,x,y,rgb,tol,opts)
 
     local stack={y*w+x}
     local changed=false
+    local minX,minY,maxX,maxY=w,h,-1,-1
     while #stack>0 do
         local offset=stack[#stack]
         stack[#stack]=nil
@@ -55,6 +60,8 @@ function Fill.apply(data,x,y,rgb,tol,opts)
                 end
             end
             changed=true
+            minX=math.min(minX,left);maxX=math.max(maxX,right)
+            minY=math.min(minY,sy);maxY=math.max(maxY,sy)
             for _,ny in ipairs({sy-1,sy+1}) do
                 if ny>=0 and ny<h then
                     local px=left
@@ -68,6 +75,7 @@ function Fill.apply(data,x,y,rgb,tol,opts)
             end
         end
     end
-    return changed
+    if not changed then return false,nil end
+    return true,{x=minX,y=minY,width=maxX-minX+1,height=maxY-minY+1}
 end
 return Fill

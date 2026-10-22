@@ -416,11 +416,13 @@ function app:fillAt(x,y)
     end
     local success,err=pcall(function()
         local data=layer.canvas:newImageData()
-        if Fill.apply(data,dx,dy,self.color,self.fillTolerance,{
+        local changed,dirty=Fill.apply(data,dx,dy,self.color,self.fillTolerance,{
             selection=self.doc.selection,alphaLock=layer.alphaLock
-        }) then
-            self.doc:replaceLayerData(selected,data)
-            self:statusMessage("Regiao preenchida na camada "..selected)
+        })
+        if changed then
+            self.doc:applyFillRegion(selected,data,dirty)
+            self:statusMessage(("Balde: %dx%d px | camada %d"):format(
+                dirty.width,dirty.height,selected))
         else self:statusMessage("Nenhuma alteracao na area selecionada") end
     end)
     if not success then self:statusMessage("Erro no balde: "..tostring(err)) end
