@@ -1398,7 +1398,7 @@ function Startup:pointerPressed(x,y)
         local entry=self:galleryEntries()[index]
         if entry then
             self.galleryDrag={entry=entry,x=x,y=y,ox=x,oy=y,
-                active=false,action=hit.action}
+                started=love.timer.getTime(),active=false,action=hit.action}
             return true
         end
     end
@@ -1408,7 +1408,10 @@ function Startup:pointerMoved(x,y)
     local d=self.galleryDrag
     if d then
         d.x,d.y=x,y
-        if (x-d.ox)^2+(y-d.oy)^2>160 then d.active=true end
+        -- ibisPaint only starts rearranging after a sustained press.
+        -- A short pointer movement still opens the artwork normally.
+        if love.timer.getTime()-d.started>=0.34 and
+            (x-d.ox)^2+(y-d.oy)^2>90 then d.active=true end
     end
 end
 function Startup:pointerReleased(x,y)
@@ -1524,7 +1527,7 @@ function Startup:keypressed(app,key)
                 elseif key=="backspace" and modal.focus then
                     self.draft[modal.focus]=self.draft[modal.focus]:sub(1,-2)
                 elseif key=="return" or key=="kpenter" then
-                    self:submit(app)
+                    if self:submit(app) then self.galleryModal=nil end
                 end
             elseif modal.kind=="rename" or modal.kind=="folder" or
                 modal.kind=="folder-rename" then
