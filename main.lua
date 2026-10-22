@@ -290,6 +290,12 @@ function love.load()
     else
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end
+    local preview=os.getenv("INKORA_PREVIEW")
+    if preview=="brush" or preview=="layers" or preview=="color" then
+        require("tests.preview").seed(app)
+        app.ui.tab=preview
+        app._previewName=preview
+    end
     if os.getenv("INKORA_TEST")=="1" then
         local ok,err=pcall(function()
             love.draw()
@@ -387,6 +393,22 @@ function love.draw()
         end
     end
     app.ui:draw(app)
+    if app._previewName and not app._captureQueued then
+        app._captureQueued=true
+        local filename="Inkora-Preview-"..app._previewName..".png"
+        love.graphics.captureScreenshot(function(pixels)
+            local ok,err=love.filesystem.write(filename,
+                pixels:encode("png"):getString())
+            if ok then
+                print("INKORA_SCREENSHOT_OK "..love.filesystem.getSaveDirectory()
+                    .."/"..filename)
+                love.event.quit(0)
+            else
+                io.stderr:write("INKORA_SCREENSHOT_FAILED "..tostring(err).."\n")
+                love.event.quit(1)
+            end
+        end)
+    end
 end
 
 function love.mousepressed(x,y,button,istouch)

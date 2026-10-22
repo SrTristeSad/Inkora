@@ -29,6 +29,21 @@ jobs:
         run: sudo apt-get install -y love xvfb
       - name: Real LÖVE + C++ bridge test (virtual display)
         run: INKORA_TILE_LIMIT=8 INKORA_CORE_PATH="$PWD/build/native/libinkora_core.so" INKORA_REQUIRE_NATIVE=1 INKORA_TEST=1 xvfb-run -a timeout 60s love .
+      - name: Render redesigned desktop previews
+        shell: bash
+        run: |
+          mkdir -p preview
+          for mode in brush layers color; do
+            INKORA_CORE_PATH="$PWD/build/native/libinkora_core.so" INKORA_PREVIEW="$mode" xvfb-run -a timeout 60s love .
+            screenshot="$(find "$HOME/.local/share" -type f -name "Inkora-Preview-$mode.png" -print -quit)"
+            test -n "$screenshot" || { echo "Screenshot not saved: $mode"; exit 1; }
+            cp "$screenshot" "preview/Inkora-Preview-$mode.png"
+          done
+          ls -lh preview/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Inkora-Desktop-Previews
+          path: preview/*.png
 
   windows-portable:
     name: Build portable Windows application
