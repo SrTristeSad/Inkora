@@ -3,7 +3,7 @@ local Native = require("src.native")
 
 function Brush.nativeAvailable() return Native.available() end
 function Brush.nativeError() return Native.error end
-function Brush.beginStroke(canvas) return Native.beginStroke(canvas) end
+function Brush.beginStroke(canvas,settings) return Native.beginStroke(canvas,settings) end
 
 local function style(color, diameter, opacity, eraser)
     love.graphics.setLineStyle("smooth")

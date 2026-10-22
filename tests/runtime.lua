@@ -21,6 +21,24 @@ local function run()
     local first=d.layers[1].canvas:newImageData()
     local _,_,bb,aa=first:getPixel(30,52)
     assert(bb>0.5 and aa>0.5,"Stroke Lua/C++ nao apareceu no canvas")
+    if stroke then
+        assert(Native.lastUpload and Native.lastUpload.pixels>0,"Nenhum pixel atualizado")
+        assert(Native.lastUpload.pixels<96*64/2,
+            "Transferencia completa desnecessaria (dirty rect)")
+        assert(Native.lastUpload.width<=60 and Native.lastUpload.height<=12,
+            "Retangulo de atualizacao maior que o segmento")
+        print("INKORA_DIRTY_REGION_UPLOAD_OK")
+    end
+    -- Mesmo com uma segunda amostra estacionaria, o motor nao pode
+    -- duplicar a opacidade na mesma coordenada.
+    if stroke then
+        local before=d.layers[1].canvas:newImageData():getPixel(10,52)
+        Brush.segment(d.layers[1].canvas,60.5,52.5,60.5,52.5,
+            {0,0.2,1},7,1,false,stroke)
+        local after=d.layers[1].canvas:newImageData():getPixel(10,52)
+        assert(math.abs(before-after)<0.005,"Segmento nulo mudou o stroke")
+        assert(Native.lastUpload.pixels==0,"Segmento vazio fez upload")
+    end
     if stroke then print("INKORA_LUA_CPP_BRIDGE_OK") end
     Brush.segment(d.layers[1].canvas,12,12,38,12,{1,0,0},9,1,false)
     Brush.shape(d.layers[1].canvas,"line",8,40,50,40,{0,1,0},3,1)

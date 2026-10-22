@@ -33,7 +33,7 @@
 
 - O motor nativo **nao reutiliza codigo nem assets** do ibisPaint, ReveriePaint ou Klecks. Algoritmos iniciais independentes. Licenca GPL-3.0 do ReveriePaint/Krita e MIT do Klecks devem ser avaliadas antes de copiar/integrar qualquer linha de codigo externo.
 - C++ recebe buffers **RGBA8 straight alpha** e pinta sobre a camada ativa. LuaJIT FFI fornece o ponteiro para a memoria do `ImageData`. O LÖVE e responsavel pelo upload para Canvas GPU. O buffer nunca pode ser realocado enquanto a funcao nativa executa.
-- Atualmente o upload de GPU e **da camada inteira por segmento**, portanto desenhos grandes podem sofrer lentidao e transferir muitos MB por gesto. **Proxima prioridade: dirty-rect/tile upload**.
+- O C++ v2 retorna dirty rectangles; LuaJIT FFI atualiza somente o retângulo modificado da textura e do Canvas. **Limitação:** ainda existe uma leitura integral do Canvas para ImageData no início de cada traço; regiões distantes em um mesmo segmento geram um retângulo envolvente, não múltiplos tiles. A próxima meta é cache de tiles e atualização segmentada.
 - API nativa: `inkora_core_api_version() == 1`; `inkora_core_stroke(InkoraStroke*)`; valida tamanho/stride/bytes, finitude e intervalo de coordenadas. Sem chamadores nao confiaveis e sem cache de ponteiros em C++.
 - **Nao foi feita engenharia reversa de codigo proprietario** nem comparacao lado a lado com o ibisPaint instalado; a matriz e um plano baseado em material publico e nos repositorios citados.
 
@@ -50,4 +50,4 @@ Lua / LÖVE: UI, gestos, camadas, documentos
             +--> antigo pincel Lua se DLL nao estiver presente
 ```
 
-**Proximo experimento tecnico mensuravel:** upload apenas de retangulos sujos, benchmark de 1280×800 vs 4096×4096, teste de ponte Windows 64 bits, parametros de ponta expostos na UI, presao da mesa digitalizadora com entrada do SO e casos de undo/redo.
+**Próximo experimento técnico mensurável:** benchmark de 1280×800 e 4096×4096, histórico de pressões, upload de múltiplos tiles, teste da ponte Windows 64 bits, pressão da mesa digitalizadora com entrada do SO e casos de undo/redo. O LÖVE já recebe o retângulo mínimo envolvente da área marcada como suja e os controles de dureza/espaçamento são expostos na UI.

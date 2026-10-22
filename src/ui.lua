@@ -276,11 +276,17 @@ function UI:drawBrushPanel(app,x,w,h)
     self:slider(x+6,328,w-12,app.stabilization,"Estabilizacao",function(v)
         app.stabilization=v
     end,tostring(math.floor(app.stabilization*100+0.5)).."%")
-    self:print("CORES",x,366,C.white)
-    self:rect(x+188,363,50,20,app.color,5)
+    self:slider(x+6,385,w-12,app.brushHardness,"Dureza da ponta",function(v)
+        app.brushHardness=v
+    end,tostring(math.floor(app.brushHardness*100+0.5)).."%")
+    self:slider(x+6,442,w-12,(app.brushSpacing-0.03)/0.47,"Espacamento",function(v)
+        app.brushSpacing=0.03+v*0.47
+    end,tostring(math.floor(app.brushSpacing*100+0.5)).."%")
+    self:print("CORES",x,481,C.white)
+    self:rect(x+188,478,50,20,app.color,5)
     for i,swatch in ipairs(palette) do
         local col,row=(i-1)%6,math.floor((i-1)/6)
-        local bx,by=x+col*40,394+row*39
+        local bx,by=x+col*40,506+row*39
         if app.colorIndex==i then
             color(C.accent)
             love.graphics.rectangle("line",bx-3,by-3,34,34,6,6)
@@ -291,13 +297,10 @@ function UI:drawBrushPanel(app,x,w,h)
             if app.tool=="eraser" then app.tool="brush" end
         end)
     end
-    self:slider(x+6,552,w-12,app.fillTolerance/0.3,"Tolerancia do balde",function(v)
+    self:slider(x+6,660,w-12,app.fillTolerance/0.3,"Tolerancia do balde",function(v)
         app.fillTolerance=v*0.3
     end,tostring(math.floor(app.fillTolerance*100+0.5)).."%")
-    self:print("Atalhos: B E H G I L R O",x,605,C.muted,self.small)
-    self:print("Shift + roda: tamanho do pincel",x,629,C.muted,self.small)
-    self:print("Arraste um PNG para importar",x,653,C.muted,self.small)
-    self:print("Pincel e borracha sao solidos neste MVP.",x,683,C.muted,self.small)
+    self:print("B E H G I L R O | Shift + roda: tamanho",x,709,C.muted,self.small)
 end
 
 function UI:drawLayersPanel(app,x,w,h)

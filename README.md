@@ -4,7 +4,7 @@
 
 > **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
 
-> **Situação atual:** existe agora o primeiro **motor raster C++ v1 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte faz upload da camada completa para a GPU durante os traços, o que deve ser otimizado por regiões/tiles.
+> **Situação atual:** existe agora o primeiro **motor raster C++ v1 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte transfere regiões alteradas para GPU (dirty rectangle), embora ainda faça uma leitura integral ao iniciar cada traço.
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
@@ -100,7 +100,9 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Rumo ao motor Lua + C++
 
-**Motor implementado nesta etapa:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
+**Atualização do motor:** ABI C++ v2 mantém estado entre eventos de mouse, calcula a região afetada pelo pincel e permite ao LÖVE atualizar apenas essa região na textura e no Canvas; a interface apresenta agora controles de dureza e espaçamento. As otimizações não equivalem a um motor profissional: ainda existe uma leitura inicial integral da camada por traço e upload de uma região envolvente, não um cache de tiles.
+
+**Motor implementado na etapa anterior:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
 
 **Próxima prioridade:** uploads parciais/tiles, dureza e espaçamento expostos na interface, entrada de pressão de mesa digitalizadora, modos de mesclagem e seleção.
 

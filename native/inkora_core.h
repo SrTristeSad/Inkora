@@ -1,24 +1,21 @@
 #pragma once
 #include <stdint.h>
 #ifdef _WIN32
-  #ifdef INKORA_CORE_BUILD
-    #define INKORA_API __declspec(dllexport)
-  #else
-    #define INKORA_API __declspec(dllimport)
-  #endif
+ #ifdef INKORA_CORE_BUILD
+  #define INKORA_API __declspec(dllexport)
+ #else
+  #define INKORA_API __declspec(dllimport)
+ #endif
 #else
-  #define INKORA_API __attribute__((visibility("default")))
+ #define INKORA_API __attribute__((visibility("default")))
 #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// C ABI v1. RGBA8 straight alpha, rows in top-down order.
-// Pixel storage is owned by the caller and must be mutable.
-// All floats are finite. Colors, opacity, hardness and pressure are in [0, 1].
-// coordinates are expressed in bitmap pixels; no screen scaling.
-// No allocation escapes from this API; thread-safety is caller's responsibility.
+// RGBA8 straight alpha; caller retains ownership of the mutable buffer.
+// API v2 leaves the original InkoraStroke layout intact to preserve ABI v1.
 typedef struct InkoraStroke {
     uint8_t *pixels;
     int32_t width, height, stride;
@@ -29,9 +26,22 @@ typedef struct InkoraStroke {
     int32_t eraser;
 } InkoraStroke;
 
-// 0 = error / invalid input, 1 = success, including fully clipped strokes.
+typedef struct InkoraStrokeState {
+    float distance_to_next; // in document pixels until the next dab
+    int32_t initialized;
+} InkoraStrokeState;
+
+typedef struct InkoraRect {
+    int32_t x, y, width, height; // empty rectangle: width == height == 0
+} InkoraRect;
+
 INKORA_API int32_t inkora_core_api_version(void);
+// Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);
+// Continuous stroke + dirty bounds. Returns 1 on success, 0 invalid input.
+// Zero size dirty rect indicates no pixels updated (e.g. fully clipped).
+INKORA_API int32_t inkora_core_stroke_v2(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty);
 
 #ifdef __cplusplus
 }

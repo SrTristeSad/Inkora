@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **MVP raster RGBA8 com CMake e testes nativos** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI v1 (pincel/borracha) com teste gráfico de integração no CI** |
+| Motor gráfico Inkora em C++ | **C++ ABI v2 com estado do traço e dirty rectangles; sujeito à validação CI** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v2 com transferência regional de pixels + teste de integração** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
@@ -25,7 +25,7 @@
 - [x] Mover **um pincel real** do prototipo Lua para C++ com trajetoria, espessura, espacamento, alpha e testes visuais/regressao. Nao remover o caminho Lua antigo antes de passar testes.
 
 ### Fase 2 — Motor de pintura
-- [ ] Pinceis: dureza, ponta/textura, dinamica, opacidade, fluxo, estabilidade e pressao quando disponivel.
+- [ ] Pinceis: ponta/textura, dinamica, fluxo, estabilidade profissional e pressao da mesa; dureza e espaçamento já são configuráveis no motor nativo.
 - [ ] Camadas: composicao, mascara, clipping, multiplos modos de mesclagem, grupos e undo/redo eficiente.
 - [ ] Selecao e transformacoes: laco, retangulo, varinha, mover, redimensionar, rotacionar.
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.

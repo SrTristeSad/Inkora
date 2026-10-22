@@ -3,84 +3,117 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 
 namespace {
 float saturate(float v) { return std::max(0.0f, std::min(1.0f, v)); }
-uint8_t byte(float v) { return static_cast<uint8_t>(std::lround(saturate(v) * 255.0f)); }
-float unit(uint8_t n) { return static_cast<float>(n) / 255.0f; }
+uint8_t byte(float v) { return static_cast<uint8_t>(std::lround(saturate(v)*255.0f)); }
+float unit(uint8_t v) { return v/255.0f; }
+bool finite(float x) { return std::isfinite(x); }
 
-void dab(const InkoraStroke &s, float cx, float cy, float pressure) {
-    const float radius = std::max(0.5f, s.diameter * (0.2f + 0.8f * saturate(pressure)) * 0.5f);
-    const float inner = radius * saturate(s.hardness);
-    const float outer = radius + 0.5f;
-    const int minX = std::max(0, static_cast<int>(std::floor(cx - outer)));
-    const int maxX = std::min(s.width - 1, static_cast<int>(std::ceil(cx + outer)));
-    const int minY = std::max(0, static_cast<int>(std::floor(cy - outer)));
-    const int maxY = std::min(s.height - 1, static_cast<int>(std::ceil(cy + outer)));
-    for (int y = minY; y <= maxY; ++y) {
-        for (int x = minX; x <= maxX; ++x) {
-            const float dx = (x + 0.5f) - cx;
-            const float dy = (y + 0.5f) - cy;
-            const float distance = std::sqrt(dx * dx + dy * dy);
-            const float coverage = distance <= inner ? 1.0f :
-                saturate((outer - distance) / std::max(0.001f, outer - inner));
-            const float strength = saturate(s.opacity) * coverage;
-            if (strength <= 0.0f) continue;
-            const auto offset = static_cast<size_t>(y) * static_cast<size_t>(s.stride)
-                + static_cast<size_t>(x) * 4u;
-            uint8_t *p = s.pixels + offset;
-            const float oldA = unit(p[3]);
-            if (s.eraser) {
-                const float nextA = oldA * (1.0f - strength);
-                if (nextA < 1.0f / 512.0f) {
-                    p[0] = p[1] = p[2] = p[3] = 0;
-                } else {
-                    p[3] = byte(nextA);
-                }
-                continue;
+bool valid(const InkoraStroke& s) {
+    if (!s.pixels || s.width < 1 || s.height < 1 || s.width > 16384 || s.height > 16384) return false;
+    if (static_cast<int64_t>(s.stride) < static_cast<int64_t>(s.width)*4) return false;
+    const uint64_t used=static_cast<uint64_t>(s.height-1)*static_cast<uint64_t>(s.stride)
+                        +static_cast<uint64_t>(s.width)*4;
+    if (s.buffer_bytes < used) return false;
+    const float params[]={s.x0,s.y0,s.x1,s.y1,s.diameter,s.hardness,
+        s.opacity,s.spacing,s.r,s.g,s.b,s.pressure0,s.pressure1};
+    for (auto n:params) if (!finite(n)) return false;
+    if (s.diameter < 0.5f || s.diameter > 2048.0f || s.spacing <= 0.0f || s.spacing > 2.0f) return false;
+    if (s.eraser != 0 && s.eraser != 1) return false;
+    if (std::abs(s.x0)>100000 || std::abs(s.y0)>100000 || std::abs(s.x1)>100000 || std::abs(s.y1)>100000) return false;
+    return true;
+}
+
+void mark(InkoraRect& r,int x0,int y0,int x1,int y1) {
+    if (x0>x1 || y0>y1) return;
+    if (r.width==0 || r.height==0) {
+        r={x0,y0,x1-x0+1,y1-y0+1};
+        return;
+    }
+    const int left=std::min(r.x,x0), top=std::min(r.y,y0);
+    const int right=std::max(r.x+r.width-1,x1), bottom=std::max(r.y+r.height-1,y1);
+    r={left,top,right-left+1,bottom-top+1};
+}
+
+void dab(const InkoraStroke &s,float cx,float cy,float pressure,InkoraRect& dirty) {
+    if (s.opacity <= 0.0f) return;
+    const float radius=std::max(0.5f,s.diameter*(0.2f+0.8f*saturate(pressure))*0.5f);
+    const float inner=radius*saturate(s.hardness);
+    const float outer=radius+0.5f;
+    const int x0=std::max(0,static_cast<int>(std::floor(cx-outer)));
+    const int x1=std::min(s.width-1,static_cast<int>(std::ceil(cx+outer)));
+    const int y0=std::max(0,static_cast<int>(std::floor(cy-outer)));
+    const int y1=std::min(s.height-1,static_cast<int>(std::ceil(cy+outer)));
+    if (x0>x1 || y0>y1) return;
+
+    bool touched=false;
+    for(int y=y0;y<=y1;++y) {
+        for(int x=x0;x<=x1;++x) {
+            const float dx=x+0.5f-cx,dy=y+0.5f-cy;
+            const float distance=std::sqrt(dx*dx+dy*dy);
+            const float coverage=distance<=inner ? 1.0f
+                :saturate((outer-distance)/std::max(0.001f,outer-inner));
+            const float strength=saturate(s.opacity)*coverage;
+            if(strength<=0) continue;
+            uint8_t* p=s.pixels+static_cast<size_t>(y)*s.stride+static_cast<size_t>(x)*4u;
+            const float oldA=unit(p[3]);
+            if(s.eraser) {
+                const float newA=oldA*(1.0f-strength);
+                if(newA<1.0f/512.0f) p[0]=p[1]=p[2]=p[3]=0;
+                else p[3]=byte(newA);
+            } else {
+                const float newA=strength+oldA*(1.0f-strength);
+                if(newA<1.0f/512.0f) continue;
+                const float oldWeight=oldA*(1.0f-strength);
+                p[0]=byte((saturate(s.r)*strength+unit(p[0])*oldWeight)/newA);
+                p[1]=byte((saturate(s.g)*strength+unit(p[1])*oldWeight)/newA);
+                p[2]=byte((saturate(s.b)*strength+unit(p[2])*oldWeight)/newA);
+                p[3]=byte(newA);
             }
-            const float newA = strength + oldA * (1.0f - strength);
-            if (newA < 1.0f / 512.0f) continue;
-            const float mixedOld = oldA * (1.0f - strength);
-            p[0] = byte((saturate(s.r) * strength + unit(p[0]) * mixedOld) / newA);
-            p[1] = byte((saturate(s.g) * strength + unit(p[1]) * mixedOld) / newA);
-            p[2] = byte((saturate(s.b) * strength + unit(p[2]) * mixedOld) / newA);
-            p[3] = byte(newA);
+            touched=true;
         }
     }
+    if (touched) mark(dirty,x0,y0,x1,y1);
 }
-bool finite(float x) { return std::isfinite(x); }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 1; }
+extern "C" int32_t inkora_core_api_version(void) { return 2; }
 
-extern "C" int32_t inkora_core_stroke(const InkoraStroke *ptr) {
-    if (!ptr || !ptr->pixels) return 0;
-    const InkoraStroke &s = *ptr;
-    if (s.width < 1 || s.height < 1 || s.width > 16384 || s.height > 16384) return 0;
-    if (static_cast<int64_t>(s.stride) < static_cast<int64_t>(s.width) * 4) return 0;
-    const uint64_t needed = static_cast<uint64_t>(s.height - 1) * static_cast<uint64_t>(s.stride)
-        + static_cast<uint64_t>(s.width) * 4;
-    if (s.buffer_bytes < needed) return 0;
-    const float params[] = {s.x0, s.y0, s.x1, s.y1, s.diameter,
-        s.hardness, s.opacity, s.spacing, s.r, s.g, s.b, s.pressure0, s.pressure1};
-    for (const float p : params) if (!finite(p)) return 0;
-    if (s.diameter < 0.5f || s.diameter > 2048.0f || s.spacing <= 0.0f) return 0;
-    if (s.eraser != 0 && s.eraser != 1) return 0;
-    // Huge coordinates are never useful, and casting them to int would overflow.
-    if (std::abs(s.x0) > 100000 || std::abs(s.y0) > 100000 ||
-        std::abs(s.x1) > 100000 || std::abs(s.y1) > 100000) return 0;
-    const float dx = s.x1 - s.x0, dy = s.y1 - s.y0;
-    const float length = std::sqrt(dx * dx + dy * dy);
-    const float step = std::max(0.75f, s.diameter * s.spacing);
-    const int count = std::max(1, static_cast<int>(std::ceil(length / step)));
-    for (int i = 0; i <= count; ++i) {
-        // Avoid double-dabbing stationary strokes (especially at low opacity).
-        if (i == 1 && length < 0.0001f) break;
-        const float t = static_cast<float>(i) / static_cast<float>(count);
-        const float pressure = s.pressure0 + (s.pressure1 - s.pressure0) * t;
-        dab(s, s.x0 + dx*t, s.y0 + dy*t, pressure);
+extern "C" int32_t inkora_core_stroke_v2(
+    const InkoraStroke* src, InkoraStrokeState* state, InkoraRect* dirty) {
+    if (!src || !state || !dirty || !valid(*src)) return 0;
+    if(state->initialized!=0 && state->initialized!=1) return 0;
+    if(!finite(state->distance_to_next)) return 0;
+
+    const InkoraStroke& s=*src;
+    *dirty={0,0,0,0};
+    const float dx=s.x1-s.x0,dy=s.y1-s.y0;
+    const float distance=std::sqrt(dx*dx+dy*dy);
+    const float step=std::max(0.75f,s.diameter*s.spacing);
+
+    if (!state->initialized) {
+        dab(s,s.x0,s.y0,s.pressure0,*dirty);
+        state->initialized=1;
+        state->distance_to_next=step;
     }
+    if(distance<0.000001f) return 1;
+
+    float travel=state->distance_to_next;
+    // Ensure a single bad state cannot hang the program.
+    if (travel<=0.0f || travel>4096.0f) return 0;
+    while(travel<=distance+0.00001f) {
+        const float t=std::min(1.0f,travel/distance);
+        dab(s,s.x0+dx*t,s.y0+dy*t,
+            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty);
+        travel+=step;
+    }
+    state->distance_to_next=travel-distance;
     return 1;
+}
+
+extern "C" int32_t inkora_core_stroke(const InkoraStroke* src) {
+    InkoraStrokeState state{0,0};
+    InkoraRect dirty{0,0,0,0};
+    return inkora_core_stroke_v2(src,&state,&dirty);
 }
