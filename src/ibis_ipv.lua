@@ -28,6 +28,65 @@ end
 
 -- All public fields are big-endian. The trailer is the two's-complement
 -- negative length of the 8-byte header plus payload.
+
+-- A raster layer's RPNG stores coverage runs in bottom-up rectangle order.
+-- The embedded PNG has the packed rows flipped vertically a second time.
+-- This parser only accepts complete bounded data; no uncertain data is used
+-- as editable raster layers (the flattened fallback remains available).
+local function parseRasterHeader(blob,canvasW,canvasH)
+    assert(blob:sub(1,4)=="RPNG","IPV: nao e RPNG")
+    assert(#blob>=20,"IPV: RPNG truncado")
+    local version=u32(blob,5)
+    assert(version==45,"IPV: versao RPNG desconhecida")
+    if #blob<=49 then
+        return {empty=true}
+    end
+    assert(#blob>=61,"IPV: cabecalho RPNG truncado")
+    local w,h,x,y=u32(blob,22),u32(blob,26),u32(blob,30),u32(blob,34)
+    local pw,ph,pad=u32(blob,38),u32(blob,42),u32(blob,46)
+    local spans=u32(blob,54)
+    if w==0 or h==0 then return {empty=true} end
+    assert(w<=canvasW and h<=canvasH and x<=canvasW-w and y<=canvasH-h,
+        "IPV: retangulo RPNG fora do canvas")
+    assert(w*h<=4096*4096,"IPV: camada RPNG grande demais")
+    assert(pw>0 and ph>0 and pw*ph<=4096*4096,
+        "IPV: dimensoes PNG RPNG invalidas")
+    assert(pad<=pw*ph,"IPV: preenchimento RPNG invalido")
+    assert(spans>0 and spans%2==0 and spans<=w*h*4+12,
+        "IPV: spans RPNG invalidos")
+    local first=58
+    local last=first+spans-1
+    assert(last+4<=#blob,"IPV: tabela RPNG truncada")
+    local pngLength=u32(blob,last+1)
+    assert(pngLength>=24 and pngLength<=MAX_IMAGE and
+        last+4+pngLength<=#blob,"IPV: PNG da camada RPNG truncado")
+    local png=blob:sub(last+5,last+4+pngLength)
+    assert(png:sub(1,8)==PNG and png:sub(13,16)=="IHDR",
+        "IPV: assinatura PNG RPNG invalida")
+    assert(u32(png,17)==pw and u32(png,21)==ph,
+        "IPV: dimensoes do PNG RPNG divergentes")
+    local runEnds={}
+    local cursor,covered=0,false
+    local painted=0
+    for p=first,last,2 do
+        local count=u16(blob,p)
+        assert(cursor+count<=w*h,"IPV: mascara RPNG ultrapassa retangulo")
+        if covered and count>0 then
+            painted=painted+count
+            runEnds[#runEnds+1]={offset=cursor,length=count}
+        end
+        cursor=cursor+count
+        covered=not covered
+    end
+    assert(cursor==w*h,"IPV: mascara RPNG incompleta")
+    assert(painted+pad==pw*ph,
+        "IPV: mascara e preenchimento RPNG inconsistentes")
+    return {
+        width=w,height=h,x=x,screenY=canvasH-y-h,
+        pw=pw,ph=ph,png=png,spans=runEnds,covered=painted,
+    }
+end
+
 function IPV.inspect(data)
     assert(type(data)=="string","IPV: bytes invalidos")
     assert(#data>=12,"IPV: cabecalho incompleto")
@@ -38,6 +97,9 @@ function IPV.inspect(data)
     local png=nil
     local snapshots=0
     local sawHeader=false
+    local latest={}
+    local layerSnapshots=0
+    local unrecognizedLayers=false
     while pos<=#data do
         count=count+1
         assert(count<=MAX_RECORDS,"IPV: registros demais")
@@ -63,25 +125,31 @@ function IPV.inspect(data)
             local layer=u32(data,payload+8)
             local flags=u32(data,payload+12)
             local imageLength=u32(data,payload+18)
-            local blob=payload+22
+            local blobStart=payload+22
+            assert(imageLength<=length-22,
+                "IPV: comprimento de snapshot invalido")
             if layer==0xFFFFFFFF and flags==0 then
                 assert(imageLength>=24 and imageLength<=MAX_IMAGE,
                     "IPV: tamanho PNG invalido")
-                assert(imageLength<=length-22,"IPV: PNG truncado")
-                assert(data:sub(blob,blob+7)==PNG,
+                assert(data:sub(blobStart,blobStart+7)==PNG,
                     "IPV: snapshot composto nao e PNG")
-                assert(data:sub(blob+12,blob+15)=="IHDR",
+                assert(data:sub(blobStart+12,blobStart+15)=="IHDR",
                     "IPV: PNG sem cabecalho IHDR")
-                -- PNG dimensions are in IHDR, immediately after the chunk type.
-                local iw,ih=u32(data,blob+16),u32(data,blob+20)
+                local iw,ih=u32(data,blobStart+16),u32(data,blobStart+20)
                 assert(iw>0 and ih>0 and iw<=MAX_CANVAS and ih<=MAX_CANVAS,
                     "IPV: dimensoes PNG invalidas")
-                if width and height then
-                    assert(iw==width and ih==height,
-                        "IPV: dimensoes da imagem divergem do canvas")
-                end
-                png=data:sub(blob,blob+imageLength-1)
+                png=data:sub(blobStart,blobStart+imageLength-1)
                 snapshots=snapshots+1
+            elseif layer~=0xFFFFFFFF and layer<=65535 then
+                -- Keep only the latest snapshot per layer id.
+                layerSnapshots=layerSnapshots+1
+                if flags==1 and imageLength>=20 and imageLength<=MAX_IMAGE
+                    and data:sub(blobStart,blobStart+3)=="RPNG" then
+                    latest[layer]=data:sub(blobStart,blobStart+imageLength-1)
+                else
+                    latest[layer]=false
+                    unrecognizedLayers=true
+                end
             end
         end
         pos=footer+4
@@ -89,10 +157,64 @@ function IPV.inspect(data)
     assert(sawHeader,"IPV: nao foi encontrado cabecalho 0100/0100")
     assert(png,"IPV: sem snapshot PNG composto reconhecido")
     assert(width and height,"IPV: canvas ausente")
+    local iw,ih=u32(png,17),u32(png,21)
+    assert(iw==width and ih==height,
+        "IPV: dimensoes da imagem divergem do canvas")
+    local layers={}
+    for id,blob in pairs(latest) do
+        if blob then layers[#layers+1]={id=id,blob=blob}
+        else unrecognizedLayers=true end
+    end
+    table.sort(layers,function(a,b)return a.id<b.id end)
     return {
         width=width,height=height,png=png,
         snapshots=snapshots,records=count,flattened=true,
+        rasterLayers=layers,layerSnapshots=layerSnapshots,
+        incompleteRaster=unrecognizedLayers,
     }
+end
+
+-- Converts each RPNG into a transparent rect ImageData with pixels
+-- oriented to the top-left coordinate system used by LÖVE and Inkora.
+-- ImageData is created only after the whole structure validates.
+function IPV.decodeRasterLayers(info)
+    assert(type(info)=="table" and info.width and info.height,
+        "IPV: falta inspeção de canvas")
+    assert(info.width<=4096 and info.height<=4096,
+        "IPV: canvas excede limite Inkora")
+    assert(#info.rasterLayers>0,"IPV: nenhuma camada RPNG")
+    assert(#info.rasterLayers<=15,"IPV: mais de 15 camadas RPNG")
+    assert(not info.incompleteRaster,"IPV: existem camadas desconhecidas")
+    local decoded={}
+    for _,item in ipairs(info.rasterLayers) do
+        local h=parseRasterHeader(item.blob,info.width,info.height)
+        local dest
+        if not h.empty then
+            local source=love.image.newImageData(love.filesystem.newFileData(
+                h.png,"ibis-layer.png"))
+            assert(source:getWidth()==h.pw and source:getHeight()==h.ph,
+                "IPV: PNG RPNG tem dimensoes incorretas")
+            dest=love.image.newImageData(h.width,h.height,"rgba8")
+            local index=0
+            for _,span in ipairs(h.spans) do
+                for cursor=span.offset,span.offset+span.length-1 do
+                    local px=index%h.pw
+                    local py=h.ph-1-math.floor(index/h.pw)
+                    local r,g,b,a=source:getPixel(px,py)
+                    local dx=cursor%h.width
+                    local dy=h.height-1-math.floor(cursor/h.width)
+                    dest:setPixel(dx,dy,r,g,b,a)
+                    index=index+1
+                end
+            end
+            assert(index==h.covered,"IPV: contagem raster divergente")
+        end
+        decoded[#decoded+1]={
+            id=item.id,imageData=dest,
+            x=h.x or 0,y=h.screenY or 0,
+        }
+    end
+    return decoded
 end
 
 -- Disallow additional operations on the original IPV. A caller must
