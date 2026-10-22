@@ -73,9 +73,9 @@ function Startup:refreshGallery()
     self.galleryScroll=0
     self.thumbnailCache={}
 end
-function Startup:openGallery(app)
+function Startup:openGallery(app,retainFolder)
     self:refreshGallery()
-    self.galleryFolder=""
+    if not retainFolder then self.galleryFolder="" end
     self.newMenu=false
     self.galleryDetailKey=nil
     self.gallerySelecting=false
