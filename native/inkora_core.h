@@ -196,6 +196,18 @@ INKORA_API int32_t inkora_core_stroke_v12(
     const InkoraWetPaint *wet, InkoraPigmentCarry *carry,
     const InkoraDabSamples *samples);
 
+// ABI v13: contiguous fill on a mutable RGBA8 layer and exact dirty bounds.
+// Keeps all ABI v12 painting entry points intact.
+typedef struct InkoraFill {
+    uint8_t *pixels;
+    uint64_t buffer_bytes;
+    int32_t width,height,stride,x,y;
+    float r,g,b,tolerance;
+    int32_t alpha_lock,selection_enabled;
+    int32_t left,top,right,bottom;
+} InkoraFill;
+INKORA_API int32_t inkora_core_fill_v13(const InkoraFill *args,InkoraRect *dirty);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

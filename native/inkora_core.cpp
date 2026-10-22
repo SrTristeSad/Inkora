@@ -201,7 +201,7 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
 }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 12; }
+extern "C" int32_t inkora_core_api_version(void) { return 13; }
 
 // Two passes with the same spacing arithmetic as strokeImpl itself.
 extern "C" int32_t inkora_core_dab_positions_v12(
