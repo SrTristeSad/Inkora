@@ -1307,6 +1307,10 @@ local function run(app)
         "Nova obra nao foi persistida")
     assert(love.filesystem.getInfo("projects/"..key.."/preview.png","file"),
         "Miniatura da obra nao foi criada")
+    local squarePreview=love.image.newImageData(
+        "projects/"..key.."/preview.png")
+    assert(squarePreview:getWidth()==squarePreview:getHeight(),
+        "A miniatura quadrada nao preservou a proporcao 1:1")
     local px,py=app:documentToScreen(128,128)
     app:strokeStart(px,py,1)
     assert(app.dragging and app.dragging.kind=="draw")
@@ -1518,6 +1522,23 @@ local function run(app)
     assert(app.doc.projectKey and app.doc.layers[2],
         "PNG nao foi preservado como camada editavel")
     assert(app:returnToGallery())
+    -- The imported original was a square. Its gallery preview must be too.
+    local squareImport=love.image.newImageData(
+        "projects/"..app.doc.projectKey.."/preview.png")
+    assert(squareImport:getWidth()==squareImport:getHeight(),
+        "Miniatura da importacao 1:1 foi distorcida")
+    -- Portrait preview: rendered content should fill a portrait PNG,
+    -- rather than the old hard-coded 320x208 landscape card.
+    local previewDoc=savedDoc.new(400,550,"Teste vertical")
+    previewDoc:save("Teste vertical")
+    local portraitPreview=love.image.newImageData(
+        "projects/"..previewDoc.projectKey.."/preview.png")
+    assert(portraitPreview:getHeight()>portraitPreview:getWidth(),
+        "Miniatura vertical foi exportada em formato horizontal")
+    assert(math.abs(portraitPreview:getWidth()/
+        portraitPreview:getHeight()-400/550)<0.015,
+        "Proporcao da miniatura vertical diverge da obra")
+    print("INKORA_ASPECT_CORRECT_GALLERY_PREVIEWS_GPU_OK")
     print("INKORA_GALLERY_PNG_IMPORT_NATIVE_DOCUMENT_OK")
 
     -- Folder information must be a bottom sheet with editable title.
