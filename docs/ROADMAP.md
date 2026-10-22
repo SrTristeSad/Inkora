@@ -16,6 +16,16 @@
 | Entrada de caneta Windows | **Ponte WinTab experimental via LuaJIT FFI, sem interceptar SDL, com curvas de pressão e fallback; teste com driver físico pendente** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
+## Engenharia reversa de entrada — tela inicial, galeria e novo canvas
+
+- [x] Fluxo integrado: titulo -> Minha galeria -> novo canvas -> editor -> salvar/voltar -> reabrir obra.
+- [x] Tela inicial funcional com galeria, novo desenho e retomada.
+- [x] Galeria local com miniaturas exportadas, metadados de dimensoes e estado vazio.
+- [x] Criacao com presets, dimensoes editaveis, orientacao, nome do projeto e preview de proporcao.
+- [x] Teste grafico end-to-end no LÖVE com arquivo reaberto e pincelada persistida; capturas de tres telas no CI.
+- [ ] Comparacao visual e de gestos lado a lado com versao concreta do ibisPaint em hardware Windows / tablet.
+- [ ] Colecoes/pastas, ordenacao configuravel, importacao direta pela galeria e time-lapse.
+
 ## Ordem de execução
 
 ### Fase 1 — Fundacao correta (proxima prioridade)

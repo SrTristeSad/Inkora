@@ -8,6 +8,15 @@
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
+## Entrada do aplicativo — engenharia reversa funcional (etapa inicial)
+
+- **Tela inicial:** o Inkora abre no titulo, com identidade grafica propria e acesso a **Minha galeria**, **Novo desenho** e atalho para retomar a ultima obra. Nao abre automaticamente uma tela em branco no editor ao iniciar.
+- **Minha galeria:** exibe projetos locais com miniaturas, nomes e dimensoes, abre obras existentes e oferece um botao para criar a primeira obra. A grade rola com o mouse; os projetos sao ordenados por modificacao.
+- **Novo desenho:** lista formatos comuns, permite largura/altura personalizadas entre 64 e 4096 pixels, inverter orientacao, nomear a obra e visualizar a proporcao antes de criar.
+- **Continuar trabalhando:** criar uma tela registra um projeto editavel; no editor, **Galeria** ou **Esc** salvam antes de voltar. Se a gravacao falhar, o editor permanece aberto para evitar perda. O formato INKORA1 e o motor C++ ABI v13 sao preservados.
+- **Miniaturas:** cada salvamento tenta gerar um preview PNG pequeno da composicao, sem substituir nem alterar os PNG de camadas. Trabalhos antigos sem miniatura continuam abrindo.
+- **Escopo:** a sequencia de entrada segue o comportamento observado e documentado do ibisPaint, mas nao se afirma paridade visual pixel a pixel; nome, simbolos, cores e identidade do Inkora sao proprios.
+
 ## Executar no PC
 
 ### Windows sem instalar LÖVE

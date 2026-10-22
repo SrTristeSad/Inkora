@@ -1276,6 +1276,57 @@ local function run(app)
         print("INKORA_DESKTOP_UI_BRUSH_LIBRARY_OK")
     end
 
+    -- Title -> gallery -> new canvas -> paint -> gallery -> reopen.
+    local function clickStartup(kind)
+        love.draw()
+        for _,hit in ipairs(app.startup.hits) do
+            if hit.kind==kind then
+                assert(app.startup:click(hit.x+hit.w/2,hit.y+hit.h/2),
+                    "Botao nao clicavel: "..kind)
+                return
+            end
+        end
+        error("Botao nao encontrado: "..kind)
+    end
+    app.screen="home"
+    app.startup:refreshGallery()
+    clickStartup("open-gallery")
+    assert(app.screen=="gallery","Inicio nao abriu galeria")
+    clickStartup("open-create")
+    assert(app.screen=="create","Galeria nao abriu criacao")
+    clickStartup("preset-7")
+    assert(app.startup.draft.width=="256" and
+        app.startup.draft.height=="256","Preset pixel art falhou")
+    clickStartup("create-artwork")
+    assert(app.screen=="editor" and app.doc.width==256 and app.doc.height==256,
+        "Nao entrou no editor apos criar o primeiro desenho")
+    local key=app.doc.projectKey
+    assert(key and love.filesystem.getInfo(
+        "projects/"..key.."/manifest.txt","file"),
+        "Nova obra nao foi persistida")
+    assert(love.filesystem.getInfo("projects/"..key.."/preview.png","file"),
+        "Miniatura da obra nao foi criada")
+    local px,py=app:documentToScreen(128,128)
+    app:strokeStart(px,py,1)
+    assert(app.dragging and app.dragging.kind=="draw")
+    app:strokeEnd(px,py,1)
+    app.dragging=nil
+    assert(app:returnToGallery(),"Volta para galeria nao salvou")
+    assert(app.screen=="gallery" and #app.startup.projects>=1)
+    local found=false
+    for _,item in ipairs(app.startup.projects) do
+        if item.key==key then
+            found=true
+            assert(item.width==256 and item.height==256 and item.preview)
+        end
+    end
+    assert(found,"Projeto criado desapareceu da galeria")
+    assert(app:openArtwork(key),"Projeto nao reabriu")
+    assert(app.screen=="editor" and app.doc.projectKey==key)
+    local _,_,_,a=app.doc.layers[1].canvas:
+        newImageData(1,1,128,128,1,1):getPixel(0,0)
+    assert(a>0.2,"Pintura nao persistiu entre galeria e editor")
+    print("INKORA_HOME_GALLERY_CREATE_REOPEN_GPU_OK")
     print("INKORA_GPU_SMOKE_OK")
 end
 
