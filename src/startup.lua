@@ -13,13 +13,17 @@ local C={
     stroke={0.24,0.32,0.42},white={1,1,1},
 }
 local PRESETS={
-    {name="Quadrado HD",w=1280,h=1280,detail="1:1"},
-    {name="Retrato",w=1080,h=1920,detail="9:16"},
-    {name="Paisagem Full HD",w=1920,h=1080,detail="16:9"},
-    {name="Ilustracao",w=1800,h=2400,detail="3:4"},
-    {name="Quadrado leve",w=640,h=640,detail="1:1"},
-    {name="Tela horizontal",w=2048,h=1536,detail="4:3"},
-    {name="Pixel art",w=256,h=256,detail="1:1"},
+    {name="SD (Rapido)",w=1024,h=768,detail="SD"},
+    {name="1:1 (SD)",w=1280,h=1280,detail="1:1"},
+    {name="3:4 (SD)",w=768,h=1024,detail="3:4"},
+    {name="9:16 (SD)",w=720,h=1280,detail="9:16"},
+    {name="Cabecalho",w=1500,h=500,detail="3:1"},
+    {name="Figurinha",w=370,h=320,detail="370x320"},
+    {name="Vertical",w=690,h=4096,detail="690x4096"},
+    {name="A4 - 150 dpi",w=1240,h=1754,detail="A4"},
+    {name="A4 - 300 dpi",w=2480,h=3508,detail="A4"},
+    {name="Ilustracao HD",w=1800,h=2400,detail="3:4"},
+    {name="Pixel Art",w=256,h=256,detail="1:1"},
 }
 local function clamp(x,a,b) return math.max(a,math.min(b,x)) end
 local function inside(x,y,r) return x>=r.x and y>=r.y and x<r.x+r.w and y<r.y+r.h end
@@ -827,12 +831,163 @@ function Startup:drawGallery(app,w,h)
     end
 end
 
+-- Ref: ibisPaint My Gallery > + > New. A single sheet contains Folder,
+-- Import Picture, custom W/H, Speed <-> Quality and scrollable canvas
+-- presets. It does not navigate to a separate dark configuration page.
+function Startup:drawNewDialog(app,w,h)
+    local modal=self.galleryModal
+    local panelW=math.min(446,w-32)
+    local px=clamp(math.floor(w*0.52),16,w-panelW-16)
+    local py=math.max(12,math.floor(h*0.043))
+    local ph=h-py-34
+    local lineH=41
+    drawRect(px,py,panelW,ph,{0.84,0.84,0.84},7)
+    drawRect(px,py,panelW,36,G.bar,7)
+    self:label("Novo",px+8,py+9,self.fonts.body,G.white,panelW-16,"center")
+    self:label("X",px+panelW-31,py+8,self.fonts.heading,{0.93,0.30,0.26})
+    self:hit(px+panelW-43,py,42,36,"new-close",function()
+        self.galleryModal=nil
+        self.error=nil
+    end)
+    local function option(text,y,kind,action,enabled)
+        drawRect(px+6,y,panelW-12,lineH-2,{0.954,0.954,0.954},2)
+        love.graphics.setColor({0.70,0.70,0.70})
+        love.graphics.line(px+6,y+lineH-1,px+panelW-6,y+lineH-1)
+        self:label(text,px+45,y+10,self.fonts.body,G.ink,panelW-60)
+        love.graphics.setColor(G.ink)
+        love.graphics.rectangle("line",px+16,y+9,21,19,3)
+        if enabled~=false then
+            self:hit(px+6,y,panelW-12,lineH-2,kind,action)
+        end
+    end
+    option("Pasta",py+39,"new-folder",function()
+        self:galleryAskFolder()
+    end)
+    option("Importar imagem PNG",py+80,"new-import",function()
+        modal.importing=true
+    end)
+    if modal.importing then
+        drawRect(px+8,py+122,panelW-16,44,{0.95,0.96,0.99},3)
+        self:label("Arraste um PNG para esta janela para criar uma obra.",
+            px+12,py+128,self.fonts.small,G.ink,panelW-24,"center")
+    else
+        drawRect(px+6,py+123,panelW-12,26,{0.24,0.24,0.24})
+        self:label("Ilustracao",px+13,py+128,self.fonts.small,G.white)
+    end
+    local d=self.draft
+    local fieldY=py+155
+    local cx=px+panelW/2
+    local fieldW=85
+    local function field(label,field,x)
+        self:label(label,x-22,fieldY+12,self.fonts.small,G.ink)
+        drawRect(x,fieldY,fieldW,34,G.white,2)
+        lineRect(x,fieldY,fieldW,34,G.line,2)
+        self:label(d[field]..(modal.focus==field and "|" or ""),
+            x+2,fieldY+7,self.fonts.body,G.ink,fieldW-4,"center")
+        self:hit(x,fieldY,fieldW,34,"new-focus-"..field,function()
+            modal.focus=field
+        end)
+    end
+    field("L","width",cx-111)
+    self:label("x",cx-11,fieldY+7,self.fonts.body,G.ink)
+    field("A","height",cx+18)
+    -- Each row has operative +/- controls and a proportional slider.
+    local function adjust(which,amount)
+        local n=tonumber(d[which]) or 1000
+        d[which]=tostring(math.floor(clamp(n+amount,64,4096)))
+        d.preset=nil
+        self.error=nil
+    end
+    local function slider(field,sy)
+        local left=px+117
+        local right=px+panelW-75
+        self:label(field=="width" and "L" or "A",px+82,sy-3,
+            self.fonts.body,G.ink)
+        love.graphics.setColor(G.ink)
+        love.graphics.circle("fill",left-27,sy+5,11)
+        love.graphics.circle("fill",right+27,sy+5,11)
+        love.graphics.setColor(G.white)
+        love.graphics.line(left-33,sy+5,left-21,sy+5)
+        love.graphics.line(right+21,sy+5,right+33,sy+5)
+        self:hit(left-40,sy-8,27,30,"new-minus-"..field,
+            function()adjust(field,-64)end)
+        self:hit(right+14,sy-8,27,30,"new-plus-"..field,
+            function()adjust(field,64)end)
+        love.graphics.setColor({0.62,0.63,0.64})
+        love.graphics.setLineWidth(5)
+        love.graphics.line(left,sy+5,right,sy+5)
+        local fraction=clamp(((tonumber(d[field]) or 1000)-64)/(4096-64),0,1)
+        love.graphics.setColor(G.white)
+        love.graphics.circle("fill",left+(right-left)*fraction,sy+5,9)
+        love.graphics.setLineWidth(1)
+        local pieces=12
+        for i=1,pieces do
+            local x1=left+(right-left)*(i-1)/pieces
+            local x2=left+(right-left)*i/pieces
+            self:hit(x1,sy-8,x2-x1,28,"new-slider-"..field.."-"..i,
+                function()
+                    d[field]=tostring(math.floor(64+4032*(i-0.5)/pieces))
+                    d.preset=nil
+                end)
+        end
+    end
+    slider("width",py+199)
+    slider("height",py+230)
+    self:label("Velocidade  ↔  Qualidade",px+36,py+254,
+        self.fonts.small,G.ink,panelW-72,"center")
+    local listY=py+278
+    local listH=math.max(58,ph-(listY-py)-12)
+    local presetsH=#PRESETS*lineH+54
+    self.canvasScroll=clamp(self.canvasScroll,0,math.max(0,presetsH-listH))
+    love.graphics.setScissor(px+6,listY,panelW-12,listH)
+    for i,preset in ipairs(PRESETS) do
+        local y=listY+(i-1)*lineH-self.canvasScroll
+        if y+lineH>=listY and y<=listY+listH then
+            drawRect(px+6,y,panelW-12,lineH-2,
+                i%2==0 and {0.89,0.89,0.89} or {0.955,0.955,0.955},2)
+            love.graphics.setColor({0.47,0.47,0.47})
+            love.graphics.rectangle("line",px+17,y+9,20,20)
+            self:label(preset.name,px+49,y+12,self.fonts.body,G.ink,
+                panelW-182)
+            self:label(preset.w.." x "..preset.h,px+panelW-133,y+12,
+                self.fonts.small,G.ink,116,"right")
+            -- A preset in ibisPaint immediately creates the canvas.
+            -- Only register its visible hit rectangle; hidden rows cannot
+            -- be accidentally activated through the clipped list.
+            local hy=math.max(y,listY)
+            local hh=math.min(y+lineH-2,listY+listH)-hy
+            if hh>0 then
+                self:hit(px+7,hy,panelW-14,hh,"preset-"..i,function()
+                    self:choosePreset(i)
+                    self.galleryModal=nil
+                    self:submit(app)
+                end)
+            end
+        end
+    end
+    love.graphics.setScissor()
+    -- Custom dimensions are committed by OK; presets work on one tap.
+    self:label("OK",px+panelW-35,py+199,self.fonts.body,G.ink)
+    self:hit(px+panelW-44,py+192,43,30,"create-artwork",function()
+        self.galleryModal=nil
+        self:submit(app)
+    end)
+    if self.error then
+        drawRect(px,py+ph-33,panelW,33,{0.92,0.82,0.79})
+        self:label(self.error,px+8,py+ph-26,self.fonts.small,G.ink,panelW-16)
+    end
+end
+
 function Startup:drawGalleryModal(app,w,h)
     local modal=self.galleryModal
     if not modal then return end
     self.hits={}
-    love.graphics.setColor(0,0,0,0.65)
+    love.graphics.setColor(0,0,0,0.42)
     love.graphics.rectangle("fill",0,0,w,h)
+    if modal.kind=="new" then
+        self:drawNewDialog(app,w,h)
+        return
+    end
     local width=math.min(470,w-80)
     local x=(w-width)/2
     local y=h/2-125
