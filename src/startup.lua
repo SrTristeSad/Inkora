@@ -647,23 +647,28 @@ function Startup:galleryFolderTile(entry,x,y,thumbW,thumbH,index)
     local outer={0.68,0.68,0.61}
     drawRect(x-5,y-5,thumbW+10,thumbH+10,light,15)
     lineRect(x-5,y-5,thumbW+10,thumbH+10,outer,15)
-    drawRect(x+13,y+13,thumbW-26,thumbH-26,G.white,3)
+    local innerW=thumbW*0.73
+    local innerH=thumbH*0.75
+    local innerX=x+(thumbW-innerW)/2
+    local innerY=y+(thumbH-innerH)/2
+    drawRect(innerX,innerY,innerW,innerH,G.white,2)
+    lineRect(innerX,innerY,innerW,innerH,G.line,2)
     local cover=self.folders:cover(entry.id,self.projects)
     if cover then
         local img=self:thumbnail(cover)
         if img then
             local iw,ih=img:getDimensions()
-            local scale=math.min((thumbW-31)/iw,(thumbH-31)/ih)
+            local scale=math.min((innerW-7)/iw,(innerH-7)/ih)
             love.graphics.setColor(1,1,1,1)
             love.graphics.draw(img,x+(thumbW-iw*scale)/2,
                 y+(thumbH-ih*scale)/2,0,scale,scale)
         end
     else
         love.graphics.setColor(0.56,0.54,0.42)
-        love.graphics.rectangle("line",x+thumbW*0.25,y+thumbH*0.40,
-            thumbW*0.50,thumbH*0.28,5,5)
-        love.graphics.rectangle("line",x+thumbW*0.25,y+thumbH*0.34,
-            thumbW*0.22,thumbH*0.09,3,3)
+        love.graphics.rectangle("line",x+thumbW*0.33,y+thumbH*0.44,
+            thumbW*0.34,thumbH*0.23,3,3)
+        love.graphics.rectangle("line",x+thumbW*0.33,y+thumbH*0.39,
+            thumbW*0.18,thumbH*0.07,2,2)
     end
     self:label(entry.name,x-5,y+thumbH+12,self.fonts.small,G.ink,
         thumbW+10,"center")
@@ -704,19 +709,17 @@ function Startup:drawGallery(app,w,h)
     end
     local contentTop=headerH
     if not self.galleryDetailKey then
-        -- The reference puts artwork immediately under the black title bar.
-        -- Constrain the working grid to three clear, large columns; the old
-        -- six-column card dashboard was visibly different.
-        local centerWidth=math.min(w-34,850)
-        local columns=math.max(1,math.min(3,math.floor(centerWidth/230)))
-        local gap=22
-        local thumbW=clamp(math.floor((centerWidth-(columns-1)*gap)/columns)-24,
-            143,213)
-        local thumbH=math.floor(thumbW*1.18)
-        local cellW=thumbW+25
-        local cellH=thumbH+54
-        local gridWidth=columns*cellW
-        local x0=(w-gridWidth)/2+12
+        -- Reference gallery: thumbnails are compact, left-aligned and
+        -- automatically fill rows, not oversized centered dashboard cards.
+        local outer=math.max(18,math.floor(w*0.017))
+        local available=w-outer*2
+        local columns=math.max(1,math.min(10,math.floor(available/178)))
+        local gap=18
+        local thumbW=clamp(math.floor(available/columns-gap),102,164)
+        local thumbH=math.floor(thumbW*1.14)
+        local cellW=thumbW+gap
+        local cellH=thumbH+46
+        local x0=outer+5
         local y0=headerH+14
         local visibleH=h-footerH-y0-12
         local rows=math.ceil(#entries/columns)
