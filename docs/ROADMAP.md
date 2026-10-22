@@ -20,11 +20,11 @@
 
 - [x] Fluxo integrado: titulo -> Minha galeria -> novo canvas -> editor -> salvar/voltar -> reabrir obra.
 - [x] Tela inicial funcional com galeria, novo desenho e retomada.
-- [x] Galeria local com miniaturas exportadas, metadados de dimensoes e estado vazio.
+- [x] Galeria reconstruida com layout de cabecalho/rodape escuros e grade clara conforme referencias oficiais. Miniaturas, nomes, estado vazio, rolagem, visualizacao ampliada antes de Editar, selecao e atalhos de teclado. Comandos reais: criar, renomear manifesto (sem regravar layers), duplicar, exportar PNG, mover para lixeira recuperavel, restaurar ultima obra.
 - [x] Criacao com presets, dimensoes editaveis, orientacao, nome do projeto e preview de proporcao.
 - [x] Teste grafico end-to-end no LÖVE com arquivo reaberto e pincelada persistida; capturas de tres telas no CI.
 - [ ] Comparacao visual e de gestos lado a lado com versao concreta do ibisPaint em hardware Windows / tablet.
-- [ ] Colecoes/pastas, ordenacao configuravel, importacao direta pela galeria e time-lapse.
+- [ ] Colecoes/pastas, ordenacao configuravel, importacao direta pela galeria, time-lapse, sincronizacao na nuvem e interface de restauracao completa da lixeira (atualmente restaura a ultima obra).
 
 ## Ordem de execução
 
