@@ -402,12 +402,16 @@ function love.load()
     local preview=os.getenv("INKORA_PREVIEW")
     if preview=="brush" or preview=="layers" or preview=="color"
         or preview=="rotate" or preview=="settings"
-        or preview=="stabilization" then
-        require("tests.preview").seed(app)
+        or preview=="stabilization" or preview=="direction" then
+        if preview=="direction" then
+            require("tests.preview").directional(app)
+        else require("tests.preview").seed(app) end
         if preview=="rotate" then
             local l,t,r,b=workspace()
             app:rotateAt(28,(l+r)/2,(t+b)/2)
             app.ui.tab="brush"
+        elseif preview=="direction" then
+            app.ui.tab="settings"
         elseif preview=="stabilization" then
             app:choosePreset("pencil")
             app.stabilization=0.96

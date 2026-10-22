@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p preview
-          for mode in brush layers color rotate settings stabilization; do
+          for mode in brush layers color rotate settings stabilization direction; do
             INKORA_CORE_PATH="$PWD/build/native/libinkora_core.so" INKORA_PREVIEW="$mode" xvfb-run -a timeout 60s love .
             screenshot="$(find "$HOME/.local/share" -type f -name "Inkora-Preview-$mode.png" -print -quit)"
             test -n "$screenshot" || { echo "Screenshot not saved: $mode"; exit 1; }

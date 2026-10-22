@@ -45,4 +45,42 @@ function Preview.seed(app)
     app:fitView()
     app:statusMessage("Inkora Desktop | interface e pincel nativo C++")
 end
+-- Show the user an actual side-by-side v8 raster difference.
+-- Both strokes are drawn through the real C++ nib pipeline.
+function Preview.directional(app)
+    app:newDocument(900,600)
+    local doc=app.doc
+    doc.name="Ponta fixa X ponta direcional - motor C++ v8"
+    doc:checkpoint()
+    local canvas=doc.layers[1].canvas
+    local function drawLoop(cx,color,follows)
+        local brush=Brush.beginStroke(canvas,{
+            tip=1,aspect=0.16,angle=0,followPath=follows,
+            hardness=1,spacing=0.07,flow=0.88,pressureOpacity=0
+        })
+        assert(brush,"Native C++ v8 tip unavailable")
+        local radiusX,radiusY=135,100
+        local samples=100
+        local lx,ly=nil,nil
+        for i=0,samples do
+            local t=i/samples*2*math.pi
+            local x=cx+math.cos(t)*radiusX
+            local y=295+math.sin(t)*radiusY
+            if not lx then lx,ly=x,y end
+            Brush.segment(canvas,lx,ly,x,y,color,36,0.9,false,brush)
+            lx,ly=x,y
+        end
+    end
+    drawLoop(235,{0.85,0.38,0.30},false)
+    drawLoop(665,{0.22,0.50,0.84},true)
+    assert(doc:addLayer("Detalhes"))
+    doc.dirty=true
+    app:choosePreset("marker")
+    app.brushTip=1
+    app.brushAngle=0
+    app.brushFollowPath=true
+    app:fitView()
+    app:statusMessage("Esquerda: ponta fixa | Direita: ponta acompanha o traco")
+end
+
 return Preview
