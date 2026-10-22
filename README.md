@@ -11,7 +11,7 @@
 ## Entrada do aplicativo — engenharia reversa funcional (etapa inicial)
 
 - **Tela inicial:** o Inkora abre no titulo, com identidade grafica propria e acesso a **Minha galeria**, **Novo desenho** e atalho para retomar a ultima obra. Nao abre automaticamente uma tela em branco no editor ao iniciar.
-- **Minha galeria:** exibe projetos locais com miniaturas, nomes e dimensoes, abre obras existentes e oferece um botao para criar a primeira obra. A grade rola com o mouse; os projetos sao ordenados por modificacao.
+- **Minha galeria (segunda tela):** agora usa cabecalho e rodape escuros e area central clara, seguindo a estrutura observada na documentacao oficial do ibisPaint, com miniaturas e titulos. Tocar em uma miniatura abre primeiro a visualizacao ampliada; **Editar** abre o motor Lua/C++. Botao **+** no rodape leva a criacao do desenho. **Selecionar** marca varias obras. Os comandos locais reais permitem **renomear, duplicar, exportar PNG, mover para lixeira com confirmacao e restaurar a ultima obra apagada**. Nao ha sincronizacao em nuvem nem reproducao de time-lapse nesta etapa (controle de video desabilitado).
 - **Novo desenho:** lista formatos comuns, permite largura/altura personalizadas entre 64 e 4096 pixels, inverter orientacao, nomear a obra e visualizar a proporcao antes de criar.
 - **Continuar trabalhando:** criar uma tela registra um projeto editavel; no editor, **Galeria** ou **Esc** salvam antes de voltar. Se a gravacao falhar, o editor permanece aberto para evitar perda. O formato INKORA1 e o motor C++ ABI v13 sao preservados.
 - **Miniaturas:** cada salvamento tenta gerar um preview PNG pequeno da composicao, sem substituir nem alterar os PNG de camadas. Trabalhos antigos sem miniatura continuam abrindo.
