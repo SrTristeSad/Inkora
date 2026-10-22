@@ -500,6 +500,13 @@ function app:sampleAt(x,y)
 end
 
 function love.load()
+    -- Screenshots use isolated artwork data; never mix automatic GPU
+    -- regression files with a person's real gallery or normal editor saves.
+    local previewIdentity=os.getenv("INKORA_PREVIEW")
+    if previewIdentity=="gallery" or previewIdentity=="gallery-folder"
+        or previewIdentity=="create" then
+        love.filesystem.setIdentity("Inkora-gallery-preview",true)
+    end
     love.graphics.setBackgroundColor(0.15,0.19,0.25)
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
@@ -529,12 +536,15 @@ function love.load()
         (preview and preview~="home" and preview~="gallery"
         and preview~="gallery-folder" and preview~="create"))
         and "editor" or "home"
-    if preview=="gallery" or preview=="gallery-folder" then
+    if preview=="gallery" or preview=="gallery-folder" or
+        preview=="create" then
         local group=require("tests.preview").gallery(app)
         if preview=="gallery-folder" and group~="" then
             app.startup:galleryOpenFolder(group)
+        elseif preview=="create" then
+            app.startup:openCreate(app)
         end
-    elseif preview=="create" then app.startup:openCreate(app) end
+    end
     if preview=="brush" or preview=="layers" or preview=="color"
         or preview=="rotate" or preview=="settings"
         or preview=="stabilization" or preview=="direction"
