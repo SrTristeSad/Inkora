@@ -83,4 +83,26 @@ function Preview.directional(app)
     app:statusMessage("Esquerda: ponta fixa | Direita: ponta acompanha o traco")
 end
 
+
+function Preview.gallery(app)
+    local keys={}
+    local names={"Estudo de cor","Aquarela azul","Personagem","Nanquim","Flores","Rascunhos"}
+    for i,name in ipairs(names) do
+        app:newDocument(400,550,name)
+        local canvas=app.doc.layers[1].canvas
+        curve(canvas,{(i%3+1)*0.22,0.3+i*0.08,0.54},55,
+            0.9,0.85,32,370,function(t)
+                return 180+math.sin((i+1)*t*3)*84+115*t
+            end)
+        curve(canvas,{0.16,0.25,0.33},12,1,1,35,350,
+            function(t)return 120+math.cos(i*t*4)*45+170*t end)
+        app.doc:save(name)
+        keys[#keys+1]=app.doc.projectKey
+    end
+    local group=app.startup.folders:create("Personagens")
+    app.startup.folders:moveProjects({keys[3]},group)
+    app.startup:openGallery(app)
+    return group
+end
+
 return Preview
