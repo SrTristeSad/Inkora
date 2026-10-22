@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v3 com pontas adicionais, dirty rectangles e cache limitado por LRU; validar CI** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v3 com transferência regional de pixels e presets de ponta** |
+| Motor gráfico Inkora em C++ | **C++ ABI v4 com máscara alfa PNG, fluxo e pressão na opacidade; aguarda validação CI** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v4 com máscara personalizada e configuração de fluxo/pressão** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
@@ -25,7 +25,9 @@
 - [x] Mover **um pincel real** do prototipo Lua para C++ com trajetoria, espessura, espacamento, alpha e testes visuais/regressao. Nao remover o caminho Lua antigo antes de passar testes.
 
 ### Fase 2 — Motor de pintura
-- [ ] Pinceis profissionais: importar ponta/bitmap, textura real, dinâmica, fluxo, estabilidade profissional e pressão da mesa.
+- [ ] Pincéis profissionais: interpolação avançada, textura contínua, tinta úmida, estabilização profissional e pressão Windows Ink/WinTab.
+- [x] Ponta personalizada por PNG até 512×512, máscara alfa (ou luminância invertida), com armazenamento local.
+- [x] Fluxo básico por carimbo e dinâmica linear de opacidade conforme pressão, via C++ ABI v4.
 - [x] Três pontas nativas iniciais (redonda, chata, granulada procedural), com API C++ v3 e testes.
 - [x] Cache de tiles 128×128 com leituras regionais sob demanda, inicialização transparente e invalidação em operações Lua.
 - [x] Limite de tiles em cache por camada, com LRU e recarregamento seguro após expulsão.

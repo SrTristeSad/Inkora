@@ -4,7 +4,7 @@
 
 > **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
 
-> **Situação atual:** existe um **motor raster C++ v3 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
+> **Situação atual:** existe um **motor raster C++ v4 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
@@ -39,6 +39,8 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 - Desfazer/refazer com histórico limitado de snapshots.
 - Zoom ancorado no cursor, pan com botão do meio ou Espaço + arrastar, ajuste da tela.
 - Importação de imagem PNG arrastada para a janela.
+- Importação de **ponta personalizada** com **Shift + arrastar PNG** (até 512×512 px, arquivo até 12 MB). PNG transparente usa alfa; imagem inteiramente opaca usa luminância invertida (preto pinta, branco não). A ponta fica salva em `brushes/custom-tip.png` na pasta de dados do LÖVE.
+- Controle de **fluxo por carimbo** e de quanto a pressão influencia a opacidade. Não é ainda a simulação de tinta do ibisPaint.
 - Exportação PNG com composição das camadas.
 - Salvar e abrir projetos editáveis com um arquivo PNG por camada e um manifesto de texto.
 
@@ -58,7 +60,8 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 | Ajustar ao espaço | F |
 | Zoom | Roda do mouse |
 | Mover tela | Meio do mouse ou Espaço + arrastar |
-| Importar PNG | Arraste um PNG para a janela |
+| Importar PNG como camada | Arraste um PNG para a janela |
+| Importar ponta personalizada | Segure Shift e arraste PNG para a janela |
 
 ### Onde os desenhos são salvos?
 
@@ -100,11 +103,11 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Rumo ao motor Lua + C++
 
-**Atualização do motor:** a API C++ **v3** acrescenta pontas **redonda, chata e granulada**, com textura procedural determinística. O módulo LuaJIT gerencia tiles de 128×128 com **cache LRU limitado** (padrão: 96 tiles por camada, variável opcional `INKORA_TILE_LIMIT` para testes), reaproveita pixels entre traços e faz upload parcial. Tiles pintados expulsos do cache são recuperados da GPU. Camadas vazias iniciam sem readback. Isso ainda não equivale ao motor de pincéis profissional do ibisPaint.
+**Atualização do motor:** a API C++ **v4** acrescenta importação de pontas PNG (máscara alfa), fluxo por carimbo e influência configurável da pressão na opacidade. A API C++ v3 havia acrescentado pontas **redonda, chata e granulada**, com textura procedural determinística. O módulo LuaJIT gerencia tiles de 128×128 com **cache LRU limitado** (padrão: 96 tiles por camada, variável opcional `INKORA_TILE_LIMIT` para testes), reaproveita pixels entre traços e faz upload parcial. Tiles pintados expulsos do cache são recuperados da GPU. Camadas vazias iniciam sem readback. Isso ainda não equivale ao motor de pincéis profissional do ibisPaint.
 
 **Motor implementado inicialmente:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
 
-**Próxima prioridade:** medir latência e uso de memória, textura importada e formas de pontas personalizáveis, integração de pressão de mesa digitalizadora, modos de mesclagem e seleção.
+**Próxima prioridade:** otimizar carimbos com máscaras importadas, medir latência e memória, adicionar entrada de pressão por Windows Ink/WinTab, modos de mesclagem e seleção. Pressão funciona no motor e em eventos de toque que a reportem; mouse comum permanece a 100%.
 
 ## Limitações atuais e próximos passos
 

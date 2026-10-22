@@ -33,9 +33,15 @@ if ffiOK then
         uint32_t seed;
         int32_t origin_x, origin_y;
     } InkoraTip;
+    typedef struct InkoraMask {
+        const uint8_t *alpha;
+        int32_t width, height, stride;
+        uint64_t buffer_bytes;
+    } InkoraMask;
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v3(const InkoraStroke *stroke,
-        InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip);
+    int32_t inkora_core_stroke_v4(const InkoraStroke *stroke,
+        InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
+        const InkoraMask *mask, float flow, float pressure_opacity);
     ]]
 end
 
@@ -67,11 +73,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==3 then
+            if vok and version==4 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v3)"
+            Native.error="ABI C++ incompativel (requer v4)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -157,6 +163,28 @@ local function getTile(cache,canvas,tx,ty)
     return tile
 end
 
+-- Create one-channel straight-alpha mask from an ImageData.
+-- If all pixels are opaque, treat the bitmap as black-on-white artwork.
+-- The returned cdata buffer is owned by Lua and kept alive by stroke settings.
+function Native.createMask(imageData)
+    assert(ffiOK, "LuaJIT FFI necessaria para mascara")
+    local w,h=imageData:getDimensions()
+    assert(w>=1 and h>=1 and w<=512 and h<=512,
+        "Ponta de pincel deve ter ate 512x512 pixels")
+    local alpha=ffi.new("uint8_t[?]",w*h)
+    local opaque=true
+    for y=0,h-1 do for x=0,w-1 do
+        local _,_,_,a=imageData:getPixel(x,y)
+        if a<0.999 then opaque=false end
+    end end
+    for y=0,h-1 do for x=0,w-1 do
+        local r,g,b,a=imageData:getPixel(x,y)
+        local value=opaque and (1-(r*0.2126+g*0.7152+b*0.0722)) or a
+        alpha[y*w+x]=math.floor(math.max(0,math.min(1,value))*255+0.5)
+    end end
+    return {buffer=alpha,width=w,height=h,stride=w,bytes=w*h}
+end
+
 function Native.beginStroke(canvas,settings)
     if not Native.available() then return nil end
     local cache=layerCaches[canvas]
@@ -184,18 +212,29 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     s.pressure0=pressure0 or 1;s.pressure1=pressure1 or 1
     s.eraser=eraser and 1 or 0
     local tip=ffi.new("InkoraTip[1]")
-    tip[0].tip=session.settings.tip or 0
+    tip[0].tip=(session.settings.tip==3) and 0 or (session.settings.tip or 0)
     tip[0].aspect=session.settings.aspect or 0.30
     tip[0].angle=session.settings.angle or 25
     tip[0].grain=session.settings.grain or 0.85
     tip[0].seed=session.settings.seed or 239
     tip[0].origin_x=tile.x
     tip[0].origin_y=tile.y
+    local custom=session.settings.mask
+    local mask=nil
+    if custom then
+        mask=ffi.new("InkoraMask[1]")
+        mask[0].alpha=ffi.cast("const uint8_t*",custom.buffer)
+        mask[0].width=custom.width
+        mask[0].height=custom.height
+        mask[0].stride=custom.stride
+        mask[0].buffer_bytes=custom.bytes
+    end
     local localState=ffi.new("InkoraStrokeState[1]")
     localState[0].distance_to_next=originalState.distance_to_next
     localState[0].initialized=originalState.initialized
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v3(stroke,localState,dirty,tip)~=1 then
+    if Native.library.inkora_core_stroke_v4(stroke,localState,dirty,tip,mask,
+            session.settings.flow or 1,session.settings.pressureOpacity or 0)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),

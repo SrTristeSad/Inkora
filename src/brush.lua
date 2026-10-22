@@ -20,9 +20,9 @@ local function style(color, diameter, opacity, eraser)
 end
 
 -- Interpolacao de discos evita falhas quando o mouse se move rapidamente.
-function Brush.segment(canvas, x1, y1, x2, y2, color, diameter, opacity, eraser, session)
+function Brush.segment(canvas, x1, y1, x2, y2, color, diameter, opacity, eraser, session, pressure0, pressure1)
     if session then
-        Native.segment(session,x1,y1,x2,y2,color,diameter,opacity,eraser)
+        Native.segment(session,x1,y1,x2,y2,color,diameter,opacity,eraser,pressure0,pressure1)
         return
     end
     Native.invalidate(canvas) -- Prototipo Lua alterou o canvas diretamente.

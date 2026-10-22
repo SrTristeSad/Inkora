@@ -48,6 +48,15 @@ typedef struct InkoraTip {
     int32_t origin_x, origin_y;
 } InkoraTip;
 
+// ABI v4: optional 8-bit grayscale alpha mask, caller owned.
+// Width/height are limited to 512 pixels; row stride is in bytes.
+// If mask is null, the procedural round/flat/grain tip is used.
+typedef struct InkoraMask {
+    const uint8_t *alpha;
+    int32_t width, height, stride;
+    uint64_t buffer_bytes;
+} InkoraMask;
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);
@@ -59,6 +68,14 @@ INKORA_API int32_t inkora_core_stroke_v2(
 INKORA_API int32_t inkora_core_stroke_v3(
     const InkoraStroke *stroke, InkoraStrokeState *state,
     InkoraRect *dirty, const InkoraTip *tip);
+
+// Native brush pipeline with custom mask and dynamic paint flow.
+// flow (0..1) scales ink deposited PER DAB.
+// pressure_opacity (0..1) controls pressure influence on ink deposition.
+// Pressure also affects brush size as in v3.
+INKORA_API int32_t inkora_core_stroke_v4(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow, float pressure_opacity);
 
 #ifdef __cplusplus
 }

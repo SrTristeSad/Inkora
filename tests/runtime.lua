@@ -75,6 +75,53 @@ local function run()
         assert(dark>0 and light>0,"Textura nativa sem variacao de alpha")
         print("INKORA_CPP_TIP_PRESETS_OK")
     end
+    if stroke then
+        -- Testa importacao de ponta PNG em memoria, fluxo e pressao via LuaJIT.
+        local alphaArt=love.image.newImageData(4,4,"rgba8")
+        for y=0,3 do for x=0,1 do
+            alphaArt:setPixel(x,y,1,1,1,1)
+        end end
+        local customMask=Native.createMask(alphaArt)
+        assert(customMask.width==4 and customMask.height==4,"Mascara PNG invalida")
+        local customDoc=Doc.new(96,64,"Imported mask GPU")
+        local customStroke=Brush.beginStroke(customDoc.layers[1].canvas,{
+            tip=3,angle=0,mask=customMask,flow=0.5,pressureOpacity=0
+        })
+        Brush.segment(customDoc.layers[1].canvas,47.5,31.5,47.5,31.5,
+            {1,0,0},20,1,false,customStroke,1,1)
+        local bitmap=customDoc.layers[1].canvas:newImageData()
+        local _,_,_,left=bitmap:getPixel(43,31)
+        local _,_,_,right=bitmap:getPixel(53,31)
+        assert(left>0.40 and left<0.60 and right<0.02,
+            "Mascara personalizada/fluxo nao respeitados")
+        local pressureDoc=Doc.new(96,64,"Pressure opacity GPU")
+        local pressureStroke=Brush.beginStroke(pressureDoc.layers[1].canvas,{
+            tip=0,flow=1,pressureOpacity=1
+        })
+        Brush.segment(pressureDoc.layers[1].canvas,40.5,28.5,40.5,28.5,
+            {0,0,1},20,1,false,pressureStroke,0,0)
+        assert(Native.lastUpload.pixels==0,"Pressao zero deveria suprimir tinta")
+        local alphaAtZero=pressureDoc.layers[1].canvas:newImageData()
+        local _,_,_,zero=alphaAtZero:getPixel(40,28)
+        assert(zero==0,"Pressao zero modificou camada")
+        local pressureStroke2=Brush.beginStroke(pressureDoc.layers[1].canvas,{
+            tip=0,flow=1,pressureOpacity=1
+        })
+        Brush.segment(pressureDoc.layers[1].canvas,40.5,28.5,40.5,28.5,
+            {0,0,1},20,1,false,pressureStroke2,1,1)
+        local full=pressureDoc.layers[1].canvas:newImageData()
+        local _,_,_,fullAlpha=full:getPixel(40,28)
+        assert(fullAlpha>0.95,"Pressao maxima nao depositou tinta")
+        -- PNG totalmente opaco: máscara por luminancia invertida.
+        local opaqueArt=love.image.newImageData(2,1,"rgba8")
+        opaqueArt:setPixel(0,0,0,0,0,1)
+        opaqueArt:setPixel(1,0,1,1,1,1)
+        local opaqueMask=Native.createMask(opaqueArt)
+        assert(opaqueMask.buffer[0]==255 and opaqueMask.buffer[1]==0,
+            "Ponta opaca precisa ler preto sobre branco")
+        print("INKORA_BITMAP_MASK_FLOW_PRESSURE_OK")
+    end
+
     -- Alteracao direta do Canvas invalida os tiles de C++.
     Brush.shape(d.layers[1].canvas,"line",60,5,60,27,{0,1,0},3,1)
     if stroke then

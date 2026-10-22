@@ -4,10 +4,12 @@ local Fill = require("src.fill")
 local Stabilizer = require("src.stabilizer")
 local UI = require("src.ui")
 local palette = require("src.palette")
+local Native = require("src.native")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
     brushHardness=0.82, brushSpacing=0.18, brushTip=0,
+    brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
     fillTolerance=0.02, colorIndex=1, color=palette[1],
     zoom=1, offsetX=0, offsetY=0, dragging=nil,
     message="Bem-vindo ao Inkora! B: pincel | G: balde | I: conta-gotas",
@@ -82,7 +84,25 @@ function app:exportPNG()
     else self:statusMessage("Falha na exportacao: "..tostring(result)) end
 end
 
-function app:strokeStart(x,y)
+-- Imported brush tips use PNG alpha, or inverted luminance for opaque PNGs.
+function app:loadBrushMask(bytes,persist)
+    assert(type(bytes)=="string" and #bytes>0 and #bytes<=12*1024*1024,
+        "Arquivo de ponta muito grande (maximo 12 MB)")
+    local source=love.filesystem.newFileData(bytes,"brush-tip.png")
+    local pixels=love.image.newImageData(source)
+    local mask=Native.createMask(pixels)
+    if persist then
+        assert(love.filesystem.createDirectory("brushes"))
+        assert(love.filesystem.write("brushes/custom-tip.png",bytes))
+    end
+    self.tipMask=mask
+    self.brushTip=3
+    self.tool="brush"
+    self.ui.tab="brush"
+    self:statusMessage(("Ponta personalizada: %d x %d"):format(mask.width,mask.height))
+end
+
+function app:strokeStart(x,y,pressure)
     local dx,dy=self:screenToDocument(x,y)
     if not insideDocument(self.doc,dx,dy) then return end
     local layer=self.doc.layers[self.doc.selected]
@@ -93,34 +113,41 @@ function app:strokeStart(x,y)
     self.doc:checkpoint()
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
-        tip=self.brushTip,aspect=0.3,angle=25,grain=0.85,seed=239,
+        tip=self.brushTip,aspect=0.3,
+        angle=self.brushTip==3 and 0 or 25,grain=0.85,seed=239,
+        mask=self.brushTip==3 and self.tipMask or nil,
+        flow=self.brushFlow,pressureOpacity=self.pressureOpacity,
     })
     self.dragging={
-        kind="draw",x=dx,y=dy,nativeStroke=nativeStroke,
+        kind="draw",x=dx,y=dy,nativeStroke=nativeStroke,pressure=pressure or 1,
         smoother=Stabilizer.new(dx,dy,self.stabilization),
     }
     Brush.segment(layer.canvas,dx,dy,dx,dy,self.color,self.brushSize,
-        self.brushOpacity,self.tool=="eraser",self.dragging.nativeStroke)
+        self.brushOpacity,self.tool=="eraser",self.dragging.nativeStroke,
+        self.dragging.pressure,self.dragging.pressure)
 end
 
-function app:strokeMove(x,y)
+function app:strokeMove(x,y,pressure)
     local drag=self.dragging
     if not drag or drag.kind~="draw" then return end
     local targetX,targetY=self:screenToDocument(x,y)
     local dx,dy=drag.smoother:push(targetX,targetY)
     local layer=self.doc.layers[self.doc.selected]
     Brush.segment(layer.canvas,drag.x,drag.y,dx,dy,self.color,
-        self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke)
+        self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke,
+        drag.pressure,pressure or 1)
+    drag.pressure=pressure or 1
     drag.x,drag.y=dx,dy
 end
 
-function app:strokeEnd(x,y)
+function app:strokeEnd(x,y,pressure)
     local drag=self.dragging
     if not drag or drag.kind~="draw" then return end
     local dx,dy=self:screenToDocument(x,y)
     dx,dy=drag.smoother:finish(dx,dy)
     Brush.segment(self.doc.layers[self.doc.selected].canvas,drag.x,drag.y,
-        dx,dy,self.color,self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke)
+        dx,dy,self.color,self.brushSize,self.brushOpacity,self.tool=="eraser",
+        drag.nativeStroke,drag.pressure,pressure or 1)
 end
 
 function app:shapeStart(x,y)
@@ -187,6 +214,11 @@ function love.load()
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
     app:newDocument(1280,800)
+    if love.filesystem.getInfo("brushes/custom-tip.png") then
+        local bytes=love.filesystem.read("brushes/custom-tip.png")
+        local ok,err=pcall(function() app:loadBrushMask(bytes,false) end)
+        if not ok then app:statusMessage("Erro na ponta salva: "..tostring(err)) end
+    end
     if Brush.nativeAvailable() then
         app:statusMessage("Motor C++ v1 ativo | LuaJIT FFI | projeto Inkora")
     else
@@ -243,7 +275,8 @@ function love.draw()
     app.ui:draw(app)
 end
 
-function love.mousepressed(x,y,button)
+function love.mousepressed(x,y,button,istouch)
+    if istouch then return end
     if button==1 and app.ui:click(x,y) then return end
     if not onWorkspace(x,y) or app.ui.modal then return end
     if button==2 or (button==1 and
@@ -257,7 +290,8 @@ function love.mousepressed(x,y,button)
     end
 end
 
-function love.mousemoved(x,y,dx,dy)
+function love.mousemoved(x,y,dx,dy,istouch)
+    if istouch then return end
     if app.ui:mousemoved(x,y) then return end
     if not app.dragging then return end
     if app.dragging.kind=="pan" then
@@ -267,7 +301,8 @@ function love.mousemoved(x,y,dx,dy)
     elseif app.dragging.kind=="shape" then app:shapeMove(x,y) end
 end
 
-function love.mousereleased(x,y,button)
+function love.mousereleased(x,y,button,istouch)
+    if istouch then return end
     if button==1 then
         app.ui:mousereleased()
         if app.dragging and app.dragging.kind=="draw" then
@@ -279,6 +314,45 @@ function love.mousereleased(x,y,button)
     elseif button==2 and app.dragging and app.dragging.kind=="pan" then
         app.dragging=nil
     end
+end
+
+-- LÖVE touch events supply pressure when the device reports it.
+-- This does not replace WinTab/Windows Ink tablet integration.
+function love.touchpressed(id,x,y,dx,dy,pressure)
+    if app.activeTouch then return end
+    app.activeTouch=id
+    if app.ui:click(x,y) then return end
+    if not onWorkspace(x,y) or app.ui.modal then return end
+    if app.tool=="hand" then app.dragging={kind="pan"}
+    elseif app.tool=="brush" or app.tool=="eraser" then app:strokeStart(x,y,pressure)
+    elseif SHAPES[app.tool] then app:shapeStart(x,y)
+    elseif app.tool=="fill" then app:fillAt(x,y)
+    elseif app.tool=="picker" then app:sampleAt(x,y) end
+end
+
+function love.touchmoved(id,x,y,dx,dy,pressure)
+    if id~=app.activeTouch then return end
+    if app.ui:mousemoved(x,y) then return end
+    if app.dragging and app.dragging.kind=="pan" then
+        app.offsetX=app.offsetX+dx
+        app.offsetY=app.offsetY+dy
+    elseif app.dragging and app.dragging.kind=="draw" then
+        app:strokeMove(x,y,pressure)
+    elseif app.dragging and app.dragging.kind=="shape" then
+        app:shapeMove(x,y)
+    end
+end
+
+function love.touchreleased(id,x,y,dx,dy,pressure)
+    if id~=app.activeTouch then return end
+    app.ui:mousereleased()
+    if app.dragging and app.dragging.kind=="draw" then
+        app:strokeEnd(x,y,pressure)
+    elseif app.dragging and app.dragging.kind=="shape" then
+        app:shapeEnd(x,y)
+    end
+    app.dragging=nil
+    app.activeTouch=nil
 end
 
 function love.wheelmoved(_,y)
@@ -323,11 +397,21 @@ function love.filedropped(file)
         app:statusMessage("Somente arquivos PNG podem ser importados.")
         return
     end
-    local ok,err=pcall(function()app.doc:importPNG(file)end)
-    if ok then
-        app.ui.tab="layers"
-        app:statusMessage("PNG importado em nova camada.")
-    else app:statusMessage("Falha ao importar: "..tostring(err)) end
+    if love.keyboard.isDown("lshift","rshift") then
+        local ok,err=pcall(function()
+            file:open("r")
+            local bytes=file:read()
+            file:close()
+            app:loadBrushMask(bytes,true)
+        end)
+        if not ok then app:statusMessage("Falha na ponta PNG: "..tostring(err)) end
+    else
+        local ok,err=pcall(function()app.doc:importPNG(file)end)
+        if ok then
+            app.ui.tab="layers"
+            app:statusMessage("PNG importado em nova camada.")
+        else app:statusMessage("Falha ao importar: "..tostring(err)) end
+    end
 end
 
 function love.resize()

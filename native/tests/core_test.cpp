@@ -108,5 +108,42 @@ int main() {
     sp.x0=sp.x1;sp.x1=last;
     assert(inkora_core_stroke_v3(&sp,&stateParts,&region,&grain)==1);
     assert(one==parts);
+    // ABI v4: imported alpha bitmap, per-dab flow and pressure-opacity.
+    std::vector<uint8_t> maskPixels(4*4,0);
+    for(int y=0;y<4;++y)for(int x=0;x<2;++x) maskPixels[y*4+x]=255;
+    InkoraMask mask{maskPixels.data(),4,4,4,maskPixels.size()};
+    std::vector<uint8_t> imported(W*H*4,0);
+    auto custom=sample(imported);
+    custom.x0=custom.x1=100.5f;custom.y0=custom.y1=70.5f;
+    custom.diameter=20;custom.pressure0=custom.pressure1=1;
+    InkoraTip customTip{0,1.0f,0.0f,0.0f,19u,0,0};
+    InkoraStrokeState cs{0,0};
+    assert(inkora_core_stroke_v4(&custom,&cs,&region,&customTip,
+        &mask,0.5f,0.0f)==1);
+    assert(px(imported,96,70,3)>110 && px(imported,96,70,3)<145);
+    assert(px(imported,105,70,3)==0);
+    assert(region.width>0 && region.height>0);
+
+    // Invalid mask is rejected before C++ reads caller memory.
+    cs={0,0};mask.buffer_bytes=3;
+    assert(!inkora_core_stroke_v4(&custom,&cs,&region,&customTip,&mask,1,0));
+    mask.buffer_bytes=maskPixels.size();mask.stride=1;
+    assert(!inkora_core_stroke_v4(&custom,&cs,&region,&customTip,&mask,1,0));
+    mask.stride=4;
+    assert(!inkora_core_stroke_v4(&custom,&cs,&region,&customTip,&mask,2,0));
+    assert(!inkora_core_stroke_v4(&custom,&cs,&region,&customTip,&mask,1,-0.1f));
+
+    // Pressure 0 deposits no paint when opacity is driven entirely by pressure.
+    std::vector<uint8_t> zeroPressure(W*H*4,0);
+    auto zp=sample(zeroPressure);
+    zp.x0=zp.x1=100.5f;zp.y0=zp.y1=70.5f;
+    zp.diameter=20;zp.pressure0=zp.pressure1=0;
+    cs={0,0};
+    assert(inkora_core_stroke_v4(&zp,&cs,&region,&customTip,nullptr,1,1));
+    assert(px(zeroPressure,100,70,3)==0 && region.width==0);
+    zp.pressure0=zp.pressure1=1;cs={0,0};
+    assert(inkora_core_stroke_v4(&zp,&cs,&region,&customTip,nullptr,1,1));
+    assert(px(zeroPressure,100,70,3)>220);
+    std::cout<<"INKORA_CPP_MASK_FLOW_PRESSURE_OK\n";
     std::cout<<"INKORA_CPP_DIRTY_STROKE_OK\n";
 }

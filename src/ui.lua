@@ -262,53 +262,67 @@ end
 function UI:drawBrushPanel(app,x,w,h)
     self:print("PINCEL / FERRAMENTA",x,139,C.white)
     local brushName=({
-        brush="Pincel redondo",eraser="Borracha solida",hand="Navegacao",
+        brush="Pintura C++",eraser="Borracha C++",hand="Navegacao",
         fill="Balde (camada atual)",picker="Conta-gotas (visivel)",
         line="Linha reta",rectangle="Retangulo",ellipse="Elipse",
     })[app.tool] or app.tool
     self:print(brushName,x,163,C.muted,self.small)
-    self:slider(x+6,208,w-12,(app.brushSize-1)/119,"Espessura",function(v)
+    self:slider(x+6,202,w-12,(app.brushSize-1)/119,"Espessura",function(v)
         app.brushSize=math.max(1,math.floor(1+v*119+0.5))
     end,tostring(app.brushSize).." px")
-    self:slider(x+6,268,w-12,app.brushOpacity,"Opacidade",function(v)
+    self:slider(x+6,249,w-12,app.brushOpacity,"Opacidade",function(v)
         app.brushOpacity=math.max(0.05,v)
     end,tostring(math.floor(app.brushOpacity*100+0.5)).."%")
-    self:slider(x+6,328,w-12,app.stabilization,"Estabilizacao",function(v)
+    self:slider(x+6,296,w-12,app.brushFlow,"Fluxo por carimbo",function(v)
+        app.brushFlow=math.max(0.01,v)
+    end,tostring(math.floor(app.brushFlow*100+0.5)).."%")
+    self:slider(x+6,343,w-12,app.pressureOpacity,"Influencia da pressao",function(v)
+        app.pressureOpacity=v
+    end,tostring(math.floor(app.pressureOpacity*100+0.5)).."%")
+    self:slider(x+6,390,w-12,app.stabilization,"Estabilizacao",function(v)
         app.stabilization=v
     end,tostring(math.floor(app.stabilization*100+0.5)).."%")
-    self:slider(x+6,385,w-12,app.brushHardness,"Dureza da ponta",function(v)
+    self:slider(x+6,437,w-12,app.brushHardness,"Dureza da ponta",function(v)
         app.brushHardness=v
     end,tostring(math.floor(app.brushHardness*100+0.5)).."%")
-    self:slider(x+6,442,w-12,(app.brushSpacing-0.03)/0.47,"Espacamento",function(v)
-        app.brushSpacing=0.03+v*0.47
-    end,tostring(math.floor(app.brushSpacing*100+0.5)).."%")
-    self:print("CORES",x,481,C.white)
-    self:rect(x+188,478,50,20,app.color,5)
+    if app.tool=="fill" then
+        self:slider(x+6,484,w-12,app.fillTolerance/0.3,"Tolerancia do balde",function(v)
+            app.fillTolerance=v*0.3
+        end,tostring(math.floor(app.fillTolerance*100+0.5)).."%")
+    else
+        self:slider(x+6,484,w-12,(app.brushSpacing-0.03)/0.47,"Espacamento",function(v)
+            app.brushSpacing=0.03+v*0.47
+        end,tostring(math.floor(app.brushSpacing*100+0.5)).."%")
+    end
+    self:print("CORES",x,518,C.white)
+    self:rect(x+188,516,50,20,app.color,5)
     for i,swatch in ipairs(palette) do
         local col,row=(i-1)%6,math.floor((i-1)/6)
-        local bx,by=x+col*40,506+row*39
+        local bx,by=x+col*40,540+row*32
         if app.colorIndex==i then
             color(C.accent)
-            love.graphics.rectangle("line",bx-3,by-3,34,34,6,6)
+            love.graphics.rectangle("line",bx-3,by-3,34,30,6,6)
         end
-        self:rect(bx,by,28,28,swatch,5)
-        self:register(bx-3,by-3,34,34,function()
+        self:rect(bx,by,28,25,swatch,5)
+        self:register(bx-3,by-3,34,29,function()
             app.colorIndex=i;app.color=swatch
             if app.tool=="eraser" then app.tool="brush" end
         end)
     end
-    self:slider(x+6,660,w-12,app.fillTolerance/0.3,"Tolerancia do balde",function(v)
-        app.fillTolerance=v*0.3
-    end,tostring(math.floor(app.fillTolerance*100+0.5)).."%")
-    self:print("PONTA C++",x,679,C.white,self.small)
-    local tips={{"Redonda",0},{"Chata",1},{"Granulada",2}}
+    self:print("PONTA C++",x,642,C.white,self.small)
+    local tips={{"Red.",0},{"Chata",1},{"Grao",2},{"PNG",3}}
     for i,t in ipairs(tips) do
-        local bx=x+(i-1)*81
-        self:button(bx,697,77,28,t[1],function()
+        local bx=x+(i-1)*61
+        self:button(bx,661,56,28,t[1],function()
+            if t[2]==3 and not app.tipMask then
+                app:statusMessage("Segure Shift e arraste PNG para criar uma ponta")
+                return
+            end
             app.brushTip=t[2]
-            app:statusMessage("Ponta nativa: "..t[1])
+            app:statusMessage("Ponta C++: "..t[1])
         end,app.brushTip==t[2] and "primary" or nil)
     end
+    self:print("Shift + arrastar PNG = importar ponta",x,700,C.muted,self.small)
 end
 
 function UI:drawLayersPanel(app,x,w,h)

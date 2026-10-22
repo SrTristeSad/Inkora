@@ -28,6 +28,15 @@ bool validTip(const InkoraTip* tip) {
         && finite(tip->grain) && tip->grain>=0.0f && tip->grain<=1.0f;
 }
 
+bool validMask(const InkoraMask* mask) {
+    if (!mask) return true;
+    if (!mask->alpha || mask->width<1 || mask->height<1 ||
+        mask->width>512 || mask->height>512 || mask->stride<mask->width) return false;
+    const uint64_t needed=static_cast<uint64_t>(mask->height-1)*
+        static_cast<uint64_t>(mask->stride)+static_cast<uint64_t>(mask->width);
+    return mask->buffer_bytes>=needed;
+}
+
 bool valid(const InkoraStroke& s) {
     if (!s.pixels || s.width < 1 || s.height < 1 || s.width > 16384 || s.height > 16384) return false;
     if (static_cast<int64_t>(s.stride) < static_cast<int64_t>(s.width)*4) return false;
@@ -55,14 +64,19 @@ void mark(InkoraRect& r,int x0,int y0,int x1,int y1) {
 }
 
 void dab(const InkoraStroke &s,float cx,float cy,float pressure,
-         InkoraRect& dirty,const InkoraTip* tip) {
-    if (s.opacity <= 0.0f) return;
+         InkoraRect& dirty,const InkoraTip* tip,const InkoraMask* mask,
+         float flow,float pressureOpacity) {
+    if (s.opacity <= 0.0f || flow <= 0.0f) return;
+    const float ink=saturate(s.opacity)*saturate(flow)*
+        (1.0f-saturate(pressureOpacity)+saturate(pressureOpacity)*saturate(pressure));
+    if (ink<=0.0f) return;
     const float radius=std::max(0.5f,s.diameter*(0.2f+0.8f*saturate(pressure))*0.5f);
     const float inner=radius*saturate(s.hardness);
     const float outer=radius+0.5f;
     const bool flat=tip && tip->tip==1;
+    const bool bitmap=mask!=nullptr;
     const bool grainy=tip && tip->tip==2 && tip->grain>0.0f;
-    const float angle=flat ? tip->angle*0.017453292519943295f : 0.0f;
+    const float angle=(flat || bitmap) && tip ? tip->angle*0.017453292519943295f : 0.0f;
     const float ca=std::cos(angle),sa=std::sin(angle);
     const float aspect=flat ? tip->aspect : 1.0f;
     const int x0=std::max(0,static_cast<int>(std::floor(cx-outer)));
@@ -78,9 +92,25 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
             const float u=ca*dx+sa*dy;
             const float v=-sa*dx+ca*dy;
             const float distance=std::sqrt(u*u+(v/aspect)*(v/aspect));
-            const float coverage=distance<=inner ? 1.0f
-                :saturate((outer-distance)/std::max(0.001f,outer-inner));
-            float strength=saturate(s.opacity)*coverage;
+            float coverage=0.0f;
+            if (bitmap) {
+                // Tip image is fitted into a diameter x diameter square,
+                // centred on the dab and rotated with the brush angle.
+                // A 1-pixel mask is valid; samples use nearest neighbours.
+                const float mx=(u/radius+1.0f)*0.5f;
+                const float my=(v/radius+1.0f)*0.5f;
+                if (mx>=0.0f && mx<1.0f && my>=0.0f && my<1.0f) {
+                    const int ix=std::min(mask->width-1,
+                        static_cast<int>(mx*static_cast<float>(mask->width)));
+                    const int iy=std::min(mask->height-1,
+                        static_cast<int>(my*static_cast<float>(mask->height)));
+                    coverage=unit(mask->alpha[static_cast<size_t>(iy)*mask->stride+ix]);
+                }
+            } else {
+                coverage=distance<=inner ? 1.0f
+                    :saturate((outer-distance)/std::max(0.001f,outer-inner));
+            }
+            float strength=ink*coverage;
             if(grainy) {
                 const float sample=static_cast<float>(textureHash(x+tip->origin_x,y+tip->origin_y,tip->seed)&65535u)/65535.0f;
                 if (sample<tip->grain*0.80f) strength*=0.025f;
@@ -109,12 +139,16 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
 }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 3; }
+extern "C" int32_t inkora_core_api_version(void) { return 4; }
 
 static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
-                          InkoraRect* dirty,const InkoraTip* tip) {
+                          InkoraRect* dirty,const InkoraTip* tip,
+                          const InkoraMask* mask,float flow,float pressureOpacity) {
     if (!src || !state || !dirty || !valid(*src)) return 0;
     if(tip && !validTip(tip)) return 0;
+    if(!validMask(mask)) return 0;
+    if(!finite(flow) || !finite(pressureOpacity) ||
+        flow<0.0f || flow>1.0f || pressureOpacity<0.0f || pressureOpacity>1.0f) return 0;
     if(state->initialized!=0 && state->initialized!=1) return 0;
     if(!finite(state->distance_to_next)) return 0;
 
@@ -125,7 +159,7 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     const float step=std::max(0.75f,s.diameter*s.spacing);
 
     if (!state->initialized) {
-        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip);
+        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip,mask,flow,pressureOpacity);
         state->initialized=1;
         state->distance_to_next=step;
     }
@@ -137,7 +171,7 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     while(travel<=distance+0.00001f) {
         const float t=std::min(1.0f,travel/distance);
         dab(s,s.x0+dx*t,s.y0+dy*t,
-            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip);
+            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip,mask,flow,pressureOpacity);
         travel+=step;
     }
     state->distance_to_next=travel-distance;
@@ -146,13 +180,19 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
 
 extern "C" int32_t inkora_core_stroke_v2(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty) {
-    return strokeImpl(src,state,dirty,nullptr);
+    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f);
 }
 
 extern "C" int32_t inkora_core_stroke_v3(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip) {
-    return strokeImpl(src,state,dirty,tip);
+    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f);
+}
+
+extern "C" int32_t inkora_core_stroke_v4(
+    const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
+    const InkoraTip* tip,const InkoraMask* mask,float flow,float pressureOpacity) {
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity);
 }
 
 extern "C" int32_t inkora_core_stroke(const InkoraStroke* src) {
