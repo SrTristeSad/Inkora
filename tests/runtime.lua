@@ -1,0 +1,45 @@
+-- Executado com INKORA_TEST=1 dentro do LÖVE em um display virtual.
+-- Exercita caminhos reais de GPU, IO, interface e serializacao.
+local Doc=require("src.document")
+local Brush=require("src.brush")
+local Fill=require("src.fill")
+
+local function close(a,b,tolerance)
+    return math.abs(a-b) <= (tolerance or 0.18)
+end
+
+local function run()
+    local d=Doc.new(96,64,"Teste GPU")
+    Brush.segment(d.layers[1].canvas,12,12,38,12,{1,0,0},9,1,false)
+    Brush.shape(d.layers[1].canvas,"line",8,40,50,40,{0,1,0},3,1)
+    Brush.shape(d.layers[1].canvas,"rectangle",10,18,38,30,{0,0,1},2,1)
+    Brush.shape(d.layers[1].canvas,"ellipse",50,10,86,39,{0,0,0},2,1)
+    local red=d:sampleColor(12,12)
+    assert(red and red[1]>0.65 and red[2]<0.5, "Amostra do pincel falhou")
+
+    local img=d.layers[1].canvas:newImageData()
+    assert(Fill.apply(img,92,59,{0,0,1},0),"Balde nao modificou area")
+    d:replaceLayerData(1,img)
+    local blue=d:sampleColor(92,59)
+    assert(blue and blue[3]>0.75 and blue[1]<0.3,"Balde nao apareceu na camada")
+    assert(d:undo(),"Undo falhou")
+    local white=d:sampleColor(92,59)
+    assert(white and close(white[1],1) and close(white[2],1),"Undo nao restaurou")
+    assert(d:redo(),"Redo falhou")
+
+    assert(d:addLayer("Teste adicional"),"Criacao de camada falhou")
+    assert(d:moveLayer(-1),"Movimentacao de camada falhou")
+    assert(d:toggleLayer(1)==nil,"Alternancia de visibilidade invalida")
+    d:toggleLayer(1)
+    d.selected=2
+    local path=d:save("Teste GPU")
+    assert(path and not d.dirty,"Salvamento nao concluiu")
+    local copy=Doc.load(d.projectKey)
+    assert(copy.width==96 and copy.height==64 and #copy.layers==2,"Projeto reaberto incorreto")
+    assert(copy:exportPNG(),"Falha ao exportar PNG")
+    local projects=Doc.listProjects()
+    assert(#projects>=1,"Projeto nao listado")
+    print("INKORA_GPU_SMOKE_OK")
+end
+
+return {run=run}

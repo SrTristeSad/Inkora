@@ -20,6 +20,10 @@ jobs:
         run: find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
       - name: Smoke test modules
         run: lua5.1 tests/smoke.lua
+      - name: Install graphics test dependencies
+        run: sudo apt-get install -y love xvfb
+      - name: Real LÖVE graphics test (virtual display)
+        run: INKORA_TEST=1 xvfb-run -a timeout 45s love .
 
   windows-portable:
     name: Build portable Windows application

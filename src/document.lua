@@ -112,13 +112,46 @@ function Document:toggleLayer(index)
     self.layers[index].visible = not self.layers[index].visible
 end
 
-function Document:setLayerOpacity(index, value)
+function Document:setLayerOpacity(index, value, alreadyCheckpoint)
     local l = self.layers[index]
     if not l then return end
     value = math.max(0.05, math.min(1, value))
     if math.abs(l.opacity - value) < 0.005 then return end
-    self:checkpoint()
+    if not alreadyCheckpoint then self:checkpoint() end
     l.opacity = value
+end
+
+-- Atualiza uma camada inteira como uma unica operacao de desfazer.
+function Document:replaceLayerData(index, imageData)
+    assert(imageData:getWidth()==self.width and imageData:getHeight()==self.height,
+        "Dimensoes invalidas")
+    if not self.layers[index] then error("Camada inexistente") end
+    self:checkpoint()
+    local canvas=newCanvas(self.width,self.height)
+    local image=love.graphics.newImage(imageData)
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.setBlendMode("replace", "premultiplied")
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(image)
+    love.graphics.pop()
+    self.layers[index].canvas=canvas
+end
+
+-- Compoe amostras de 1 pixel das camadas visiveis.
+function Document:sampleColor(px,py)
+    px,py=math.floor(px),math.floor(py)
+    if px<0 or py<0 or px>=self.width or py>=self.height then return nil end
+    local r,g,b=1,1,1
+    for _,l in ipairs(self.layers) do
+        if l.visible and l.opacity>0 then
+            local pixel=l.canvas:newImageData(1,1,px,py,1,1)
+            local pr,pg,pb,pa=pixel:getPixel(0,0)
+            local a=pa*l.opacity
+            r,g,b=pr*a+r*(1-a),pg*a+g*(1-a),pb*a+b*(1-a)
+        end
+    end
+    return {r,g,b}
 end
 
 function Document:draw(x, y, scale)

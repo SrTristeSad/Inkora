@@ -6,7 +6,7 @@ function love.conf(t)
     t.window.width = 1360
     t.window.height = 820
     t.window.minwidth = 930
-    t.window.minheight = 620
+    t.window.minheight = 760
     t.window.resizable = true
     t.window.highdpi = true
     t.modules.physics = false

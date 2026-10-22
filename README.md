@@ -24,8 +24,13 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil já 
 
 ### Ferramentas incluídas nesta primeira versão
 
-- Pincel e borracha rasterizados em Canvas com interpolação de traços.
-- Escolha de cores por paleta, tamanho de pincel e opacidade do traço.
+- Pincel e borracha rasterizados em Canvas com interpolação de traços e estabilizador configurável.
+- Ferramentas de linha, retângulo e elipse com pré-visualização.
+- Balde de tinta na camada selecionada (tolerância configurável).
+- Conta-gotas para amostrar a cor visível de todas as camadas.
+- Escolha de cores por paleta, tamanho, opacidade do traço e estabilização.
+- Painéis separados para pincéis e camadas, com controles deslizantes arrastáveis.
+- Novo documento com largura e altura configuráveis (64 a 4096 px).
 - Camadas transparentes: criar, excluir, ordenar, ocultar, controlar opacidade.
 - Desfazer/refazer com histórico limitado de snapshots.
 - Zoom ancorado no cursor, pan com botão do meio ou Espaço + arrastar, ajuste da tela.
@@ -38,6 +43,8 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil já 
 | Ação | Atalho |
 | --- | --- |
 | Pincel / Borracha / Mover | B / E / H |
+| Balde / Conta-gotas | G / I |
+| Linha / Retângulo / Elipse | L / R / O |
 | Aumentar / diminuir tamanho | ] / [ |
 | Desfazer / Refazer | Ctrl+Z / Ctrl+Y |
 | Novo documento | Ctrl+N |
@@ -84,6 +91,6 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Limitações atuais e próximos passos
 
-Este é um MVP, não um motor profissional: não há pressão nativa de mesa digitalizadora no desktop, seleção, filtros, estabilizador avançado, formatos PSD/KRA, pincéis de textura nem aceleração otimizada para telas enormes. O histórico usa cópias completas de camadas e por isso é limitado em tamanho. A interface desktop será adaptada futuramente para Android. É necessário testar a execução real no LÖVE e o desempenho em diferentes GPUs.
+Este é um MVP, não um motor profissional: não há pressão nativa de mesa digitalizadora no desktop, seleção, filtros, estabilizador profissional por trajetória, formatos PSD/KRA, pincéis de textura nem aceleração otimizada para telas enormes. O balde de tinta processa apenas a camada atual na CPU e pode demorar em imagens grandes. O histórico usa cópias completas de camadas e por isso é limitado em tamanho. A interface desktop será adaptada futuramente para Android. É necessário testar a execução real no LÖVE e o desempenho em diferentes GPUs.
 
 **Desenvolvimento:** projeto independente de pintura digital. Nome e identidade próprios; sem associação oficial ao ibisPaint.
