@@ -20,8 +20,8 @@
 
 - [x] Fluxo integrado: titulo -> Minha galeria -> novo canvas -> editor -> salvar/voltar -> reabrir obra.
 - [x] Tela inicial funcional com galeria, novo desenho e retomada.
-- [x] Galeria reconstruida com layout de cabecalho/rodape escuros e grade clara conforme referencias oficiais. Miniaturas, nomes, estado vazio, rolagem, visualizacao ampliada antes de Editar, selecao e atalhos de teclado. Comandos reais: criar, renomear manifesto (sem regravar layers), duplicar, exportar PNG, mover para lixeira recuperavel, restaurar ultima obra.
-- [x] Criacao com presets, dimensoes editaveis, orientacao, nome do projeto e preview de proporcao.
+- [x] Galeria com barras escuras, miniaturas responsivas alinhadas a esquerda e fundo claro, visualizacao ampliada antes de Editar, selecao, miniaturas de pastas emolduradas e atalhos. A fidelidade visual ainda depende de calibracao por capturas lado a lado. Comandos reais: criar, renomear manifesto (sem regravar layers), duplicar, exportar PNG, mover para lixeira recuperavel, restaurar ultima obra.
+- [x] Janela Novo SOBRE Minha Galeria como no tutorial oficial: Pasta de criacao imediata, Importar PNG (arrastar arquivo), campos L/A com +/- e selecao, Velocidade/Qualidade e presets por proporcao e impressao; OK customizado cria a tela, preset cria imediatamente. Canvas em branco nao apresenta texto ficticio.
 - [x] Teste grafico end-to-end no LÖVE com arquivo reaberto e pincelada persistida; capturas de tres telas no CI.
 - [ ] Comparacao visual e de gestos lado a lado com versao concreta do ibisPaint em hardware Windows / tablet.
 - [x] Grupos/pastas na galeria: menu + abre Nova pasta e Novo desenho; pastas aninhadas, renomeacao pelo titulo, mover desenhos via selecao ou arrastar, agrupar ao arrastar um desenho sobre outro, navegacao Voltar, lixeira e criacao de obra dentro do grupo. Indice persistente separado do formato INKORA1, testado em Lua e GPU.
