@@ -1485,6 +1485,50 @@ local function run(app)
     app.startup:refreshGallery()
     print("INKORA_GALLERY_CREATE_NEST_MOVE_DRAG_OK")
 
+    -- Real New overlay: edit custom resolution, adjust quality and create.
+    app.startup:openGallery(app)
+    clickStartup("tool-plus")
+    assert(app.startup.galleryModal.kind=="new")
+    clickStartup("new-quality-9")
+    assert(app.startup.galleryModal.quality>0.8)
+    clickStartup("new-focus-width")
+    app.startup.draft.width=""
+    love.textinput("768")
+    clickStartup("new-focus-height")
+    app.startup.draft.height=""
+    love.textinput("900")
+    clickStartup("create-artwork")
+    assert(app.screen=="editor" and app.doc.width==768 and
+        app.doc.height==900,"Campos L/A e OK nao definiram o canvas")
+    assert(app:returnToGallery())
+    print("INKORA_NEW_CANVAS_CUSTOM_RESOLUTION_QUALITY_OK")
+
+    -- Gallery PNG drag/drop must create a native editable artwork, not a
+    -- mere image preview or replace existing documents.
+    local data=love.image.newImageData(64,64)
+    data:setPixel(12,12,0.92,0.1,0.21,1)
+    local bytes=data:encode("png"):getString()
+    local virtualPNG={
+        getFilename=function()return "C:"..string.char(92).."artes"..
+            string.char(92).."importada.png" end,
+        open=function()end,read=function()return bytes end,close=function()end
+    }
+    assert(app:importGalleryPNG(virtualPNG),"PNG nao entrou na galeria")
+    assert(app.screen=="editor" and app.doc.width==64 and app.doc.height==64)
+    assert(app.doc.projectKey and app.doc.layers[2],
+        "PNG nao foi preservado como camada editavel")
+    assert(app:returnToGallery())
+    print("INKORA_GALLERY_PNG_IMPORT_NATIVE_DOCUMENT_OK")
+
+    -- Folder information must be a bottom sheet with editable title.
+    assert(app.startup:galleryOpenFolder(group))
+    assert(app.startup:galleryFolderInfo())
+    assert(app.startup.galleryModal.kind=="folder-info")
+    app.startup.galleryModal.value="Pasta de estudos"
+    assert(app.startup:galleryConfirmFolderInfo())
+    assert(app.startup.folders:name(group)=="Pasta de estudos")
+    app.startup.galleryFolder=""
+    print("INKORA_FOLDER_INFO_RENAME_OK")
     print("INKORA_GPU_SMOKE_OK")
 end
 
