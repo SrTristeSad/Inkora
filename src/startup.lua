@@ -120,7 +120,7 @@ local function drawGalleryPencil(cx,cy,radius)
     love.graphics.rotate(-math.pi/4)
     love.graphics.setColor(HOME_OUTLINE)
     love.graphics.setLineStyle("smooth")
-    love.graphics.setLineJoin("round")
+    love.graphics.setLineJoin("bevel")
     love.graphics.setLineWidth(math.max(2,radius*0.029))
 
     -- Main body. The division near the rear forms the pencil's eraser band.
