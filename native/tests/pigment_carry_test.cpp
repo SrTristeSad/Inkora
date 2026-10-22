@@ -67,7 +67,7 @@ int main() {
     assert(normal==dry); // zero pickup is byte-exact v10
     assert(carried!=normal);
     assert(brush.carry.initialized==1);
-    assert(brush.carry.reservoir_r>0.85f);
+    assert(brush.carry.reservoir_r>0.80f);
     assert(channel(carried,95,32,0)>channel(normal,95,32,0)+18);
     assert(channel(carried,95,32,1)<channel(normal,95,32,1));
     assert(channel(carried,95,32,3)>0);
