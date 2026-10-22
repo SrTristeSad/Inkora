@@ -280,6 +280,8 @@ function app:strokeStart(x,y,pressure)
     -- Metadata history may share an older version of this layer's canvas.
     -- Detach on actual pixel editing, not on property-only edits.
     self.doc:ensureLayerWritable(self.doc.selected)
+    -- Copy-on-write may replace the Canvas; never paint its stale alias.
+    layer=self.doc.layers[self.doc.selected]
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
         tip=self.brushTip,aspect=0.3,
