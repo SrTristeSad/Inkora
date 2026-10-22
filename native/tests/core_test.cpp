@@ -17,7 +17,7 @@ static uint8_t px(const std::vector<uint8_t>& image,int x,int y,int c) {
     return image[(y*W+x)*4+c];
 }
 int main() {
-    assert(inkora_core_api_version()==2);
+    assert(inkora_core_api_version()==3);
     std::vector<uint8_t> data(W*H*4,0);
     auto s=sample(data);
     InkoraStrokeState state{0,0};
@@ -68,5 +68,42 @@ int main() {
     assert(px(pressure,180,85,3)==0);
     p.pressure0=p.pressure1=1;assert(inkora_core_stroke(&p));
     assert(px(pressure,180,85,3)>0);
+    // ABI v3: brush tips must alter coverage while keeping legacy v2.
+    std::vector<uint8_t> round(W*H*4,0),flat(W*H*4,0),grained(W*H*4,0);
+    auto sr=sample(round);
+    sr.x0=sr.x1=150.5f;sr.y0=sr.y1=65.5f;sr.diameter=24;
+    InkoraStrokeState baseline{0,0};
+    InkoraRect region{};
+    assert(inkora_core_stroke_v2(&sr,&baseline,&region)==1);
+    auto sf=sample(flat);
+    sf.x0=sf.x1=150.5f;sf.y0=sf.y1=65.5f;sf.diameter=24;
+    InkoraTip nib{1,0.2f,0.0f,0.0f,42u};
+    InkoraStrokeState nibState{0,0};
+    assert(inkora_core_stroke_v3(&sf,&nibState,&region,&nib)==1);
+    assert(px(round,150,73,3)>80 && px(flat,150,73,3)==0);
+    assert(px(flat,159,65,3)>150);
+    auto sg=sample(grained);
+    sg.x0=sg.x1=150.5f;sg.y0=sg.y1=65.5f;sg.diameter=24;
+    InkoraTip chalk{2,1.0f,0.0f,0.95f,29u};
+    InkoraStrokeState chalkState{0,0};
+    assert(inkora_core_stroke_v3(&sg,&chalkState,&region,&chalk)==1);
+    assert(grained!=round);
+    chalk.grain=2.0f;
+    assert(inkora_core_stroke_v3(&sg,&chalkState,&region,&chalk)==0);
+    chalk.grain=0.95f;
+    chalk.tip=9;
+    assert(inkora_core_stroke_v3(&sg,&chalkState,&region,&chalk)==0);
+    // Texture is deterministic even when stroke input is segmented.
+    std::vector<uint8_t> one(W*H*4,0),parts(W*H*4,0);
+    auto so=sample(one), sp=sample(parts);
+    so.opacity=sp.opacity=0.6f;
+    InkoraTip grain{2,1.0f,0.0f,0.8f,32u};
+    InkoraStrokeState stateOne{0,0},stateParts{0,0};
+    assert(inkora_core_stroke_v3(&so,&stateOne,&region,&grain)==1);
+    float last=sp.x1;sp.x1=41.5f;
+    assert(inkora_core_stroke_v3(&sp,&stateParts,&region,&grain)==1);
+    sp.x0=sp.x1;sp.x1=last;
+    assert(inkora_core_stroke_v3(&sp,&stateParts,&region,&grain)==1);
+    assert(one==parts);
     std::cout<<"INKORA_CPP_DIRTY_STROKE_OK\n";
 }

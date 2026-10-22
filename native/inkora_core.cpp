@@ -10,6 +10,24 @@ uint8_t byte(float v) { return static_cast<uint8_t>(std::lround(saturate(v)*255.
 float unit(uint8_t v) { return v/255.0f; }
 bool finite(float x) { return std::isfinite(x); }
 
+uint32_t textureHash(int x,int y,uint32_t seed) {
+    // Position-stable texture: splitting an input stroke across events
+    // does not change the procedural grain.
+    uint32_t h=seed ^ (static_cast<uint32_t>(x)*0x9E3779B9u)
+                    ^ (static_cast<uint32_t>(y)*0x85EBCA6Bu);
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    h *= 0x846CA68Bu;
+    return h ^ (h >> 16);
+}
+bool validTip(const InkoraTip* tip) {
+    if(!tip || tip->tip<0 || tip->tip>2) return false;
+    return finite(tip->aspect) && tip->aspect>=0.1f && tip->aspect<=1.0f
+        && finite(tip->angle) && std::abs(tip->angle)<=360.0f
+        && finite(tip->grain) && tip->grain>=0.0f && tip->grain<=1.0f;
+}
+
 bool valid(const InkoraStroke& s) {
     if (!s.pixels || s.width < 1 || s.height < 1 || s.width > 16384 || s.height > 16384) return false;
     if (static_cast<int64_t>(s.stride) < static_cast<int64_t>(s.width)*4) return false;
@@ -36,11 +54,17 @@ void mark(InkoraRect& r,int x0,int y0,int x1,int y1) {
     r={left,top,right-left+1,bottom-top+1};
 }
 
-void dab(const InkoraStroke &s,float cx,float cy,float pressure,InkoraRect& dirty) {
+void dab(const InkoraStroke &s,float cx,float cy,float pressure,
+         InkoraRect& dirty,const InkoraTip* tip) {
     if (s.opacity <= 0.0f) return;
     const float radius=std::max(0.5f,s.diameter*(0.2f+0.8f*saturate(pressure))*0.5f);
     const float inner=radius*saturate(s.hardness);
     const float outer=radius+0.5f;
+    const bool flat=tip && tip->tip==1;
+    const bool grainy=tip && tip->tip==2 && tip->grain>0.0f;
+    const float angle=flat ? tip->angle*0.017453292519943295f : 0.0f;
+    const float ca=std::cos(angle),sa=std::sin(angle);
+    const float aspect=flat ? tip->aspect : 1.0f;
     const int x0=std::max(0,static_cast<int>(std::floor(cx-outer)));
     const int x1=std::min(s.width-1,static_cast<int>(std::ceil(cx+outer)));
     const int y0=std::max(0,static_cast<int>(std::floor(cy-outer)));
@@ -51,11 +75,18 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,InkoraRect& dirt
     for(int y=y0;y<=y1;++y) {
         for(int x=x0;x<=x1;++x) {
             const float dx=x+0.5f-cx,dy=y+0.5f-cy;
-            const float distance=std::sqrt(dx*dx+dy*dy);
+            const float u=ca*dx+sa*dy;
+            const float v=-sa*dx+ca*dy;
+            const float distance=std::sqrt(u*u+(v/aspect)*(v/aspect));
             const float coverage=distance<=inner ? 1.0f
                 :saturate((outer-distance)/std::max(0.001f,outer-inner));
-            const float strength=saturate(s.opacity)*coverage;
-            if(strength<=0) continue;
+            float strength=saturate(s.opacity)*coverage;
+            if(grainy) {
+                const float sample=static_cast<float>(textureHash(x+tip->origin_x,y+tip->origin_y,tip->seed)&65535u)/65535.0f;
+                if (sample<tip->grain*0.80f) strength*=0.025f;
+                else strength*=(0.80f+sample*0.20f);
+            }
+            if(strength<=0.0f) continue;
             uint8_t* p=s.pixels+static_cast<size_t>(y)*s.stride+static_cast<size_t>(x)*4u;
             const float oldA=unit(p[3]);
             if(s.eraser) {
@@ -78,11 +109,12 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,InkoraRect& dirt
 }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 2; }
+extern "C" int32_t inkora_core_api_version(void) { return 3; }
 
-extern "C" int32_t inkora_core_stroke_v2(
-    const InkoraStroke* src, InkoraStrokeState* state, InkoraRect* dirty) {
+static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
+                          InkoraRect* dirty,const InkoraTip* tip) {
     if (!src || !state || !dirty || !valid(*src)) return 0;
+    if(tip && !validTip(tip)) return 0;
     if(state->initialized!=0 && state->initialized!=1) return 0;
     if(!finite(state->distance_to_next)) return 0;
 
@@ -93,7 +125,7 @@ extern "C" int32_t inkora_core_stroke_v2(
     const float step=std::max(0.75f,s.diameter*s.spacing);
 
     if (!state->initialized) {
-        dab(s,s.x0,s.y0,s.pressure0,*dirty);
+        dab(s,s.x0,s.y0,s.pressure0,*dirty,tip);
         state->initialized=1;
         state->distance_to_next=step;
     }
@@ -105,11 +137,22 @@ extern "C" int32_t inkora_core_stroke_v2(
     while(travel<=distance+0.00001f) {
         const float t=std::min(1.0f,travel/distance);
         dab(s,s.x0+dx*t,s.y0+dy*t,
-            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty);
+            s.pressure0+(s.pressure1-s.pressure0)*t,*dirty,tip);
         travel+=step;
     }
     state->distance_to_next=travel-distance;
     return 1;
+}
+
+extern "C" int32_t inkora_core_stroke_v2(
+    const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty) {
+    return strokeImpl(src,state,dirty,nullptr);
+}
+
+extern "C" int32_t inkora_core_stroke_v3(
+    const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
+    const InkoraTip* tip) {
+    return strokeImpl(src,state,dirty,tip);
 }
 
 extern "C" int32_t inkora_core_stroke(const InkoraStroke* src) {

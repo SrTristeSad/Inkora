@@ -1,12 +1,13 @@
--- Inkora ABI v2: gerenciamento de tiles RGBA8 para o motor raster em C++.
+-- Inkora ABI v3: cache LRU de tiles RGBA8 + pontas nativas em C++.
 -- Tiles CPU (128x128) sao inicializados sob demanda lendo apenas seu recorte da GPU.
 -- Permanecem em cache entre pinceladas, removendo a leitura integral por stroke.
 -- O C++ e responsavel pelo pixel/alpha; Lua organiza entrada e upload por tiles.
 local Native={library=nil,error=nil,attempted=false,lastUpload=nil}
 local ffiOK,ffi=pcall(require,"ffi")
 local TILE_SIZE=128
+local TILE_LIMIT=math.max(4,math.min(256,math.floor(tonumber(os.getenv("INKORA_TILE_LIMIT")) or 96)))
 local layerCaches=setmetatable({},{__mode="k"})
-local metrics={readbacks=0,readbackPixels=0,uploadedPixels=0,uploadCalls=0,cacheHits=0,zeroTiles=0}
+local metrics={readbacks=0,readbackPixels=0,uploadedPixels=0,uploadCalls=0,cacheHits=0,zeroTiles=0,evictions=0}
 
 if ffiOK then
     ffi.cdef[[
@@ -26,9 +27,15 @@ if ffiOK then
     typedef struct InkoraRect {
         int32_t x, y, width, height;
     } InkoraRect;
+    typedef struct InkoraTip {
+        int32_t tip;
+        float aspect, angle, grain;
+        uint32_t seed;
+        int32_t origin_x, origin_y;
+    } InkoraTip;
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v2(const InkoraStroke *stroke,
-        InkoraStrokeState *state, InkoraRect *dirty);
+    int32_t inkora_core_stroke_v3(const InkoraStroke *stroke,
+        InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip);
     ]]
 end
 
@@ -60,11 +67,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==2 then
+            if vok and version==3 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v2)"
+            Native.error="ABI C++ incompativel (requer v3)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -82,7 +89,7 @@ end
 function Native.registerBlank(canvas)
     if not canvas then return end
     local w,h=canvas:getDimensions()
-    layerCaches[canvas]={width=w,height=h,tiles={},blank=true}
+    layerCaches[canvas]={width=w,height=h,tiles={},count=0,clock=0,blank=true,touched={}}
 end
 
 function Native.stats()
@@ -91,22 +98,49 @@ function Native.stats()
     return out
 end
 
+function Native.cacheSize(canvas)
+    local cache=layerCaches[canvas]
+    return cache and cache.count or 0
+end
+
+function Native.tileLimit()
+    return TILE_LIMIT
+end
+
 function Native.resetStats()
     for k in pairs(metrics) do metrics[k]=0 end
 end
 
 local function getTile(cache,canvas,tx,ty)
     local key=tx..":"..ty
+    cache.clock=cache.clock+1
     local tile=cache.tiles[key]
     if tile then
+        tile.used=cache.clock
         metrics.cacheHits=metrics.cacheHits+1
         return tile
+    end
+    if cache.count>=TILE_LIMIT then
+        local oldestKey,oldestTick=nil,math.huge
+        for k,existing in pairs(cache.tiles) do
+            if existing.used<oldestTick then
+                oldestTick=existing.used
+                oldestKey=k
+            end
+        end
+        if oldestKey then
+            -- Todos os pixels ja foram enviados ao Canvas; podemos ler o tile
+            -- novamente da GPU quando ele voltar a ser usado.
+            cache.tiles[oldestKey]=nil
+            cache.count=cache.count-1
+            metrics.evictions=metrics.evictions+1
+        end
     end
     local x,y=tx*TILE_SIZE,ty*TILE_SIZE
     local w=math.min(TILE_SIZE,cache.width-x)
     local h=math.min(TILE_SIZE,cache.height-y)
     local data
-    if cache.blank then
+    if cache.blank and not cache.touched[key] then
         data=love.image.newImageData(w,h,"rgba8")
         metrics.zeroTiles=metrics.zeroTiles+1
     else
@@ -117,8 +151,9 @@ local function getTile(cache,canvas,tx,ty)
     assert(data:getFormat()=="rgba8","Inkora exige RGBA8 para tiles")
     local image=love.graphics.newImage(data)
     image:setFilter("nearest","nearest")
-    tile={x=x,y=y,w=w,h=h,data=data,image=image}
+    tile={key=key,x=x,y=y,w=w,h=h,data=data,image=image,used=cache.clock}
     cache.tiles[key]=tile
+    cache.count=cache.count+1
     return tile
 end
 
@@ -127,7 +162,7 @@ function Native.beginStroke(canvas,settings)
     local cache=layerCaches[canvas]
     if not cache then
         local w,h=canvas:getDimensions()
-        cache={width=w,height=h,tiles={}}
+        cache={width=w,height=h,tiles={},count=0,clock=0,blank=false,touched={}}
         layerCaches[canvas]=cache
     end
     return {cache=cache,canvas=canvas,settings=settings or {},
@@ -148,11 +183,19 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     s.r=color[1];s.g=color[2];s.b=color[3]
     s.pressure0=pressure0 or 1;s.pressure1=pressure1 or 1
     s.eraser=eraser and 1 or 0
+    local tip=ffi.new("InkoraTip[1]")
+    tip[0].tip=session.settings.tip or 0
+    tip[0].aspect=session.settings.aspect or 0.30
+    tip[0].angle=session.settings.angle or 25
+    tip[0].grain=session.settings.grain or 0.85
+    tip[0].seed=session.settings.seed or 239
+    tip[0].origin_x=tile.x
+    tip[0].origin_y=tile.y
     local localState=ffi.new("InkoraStrokeState[1]")
     localState[0].distance_to_next=originalState.distance_to_next
     localState[0].initialized=originalState.initialized
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v2(stroke,localState,dirty)~=1 then
+    if Native.library.inkora_core_stroke_v3(stroke,localState,dirty,tip)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),
@@ -176,6 +219,7 @@ local function updateTile(session,tile,r)
     local px=r.width*r.height
     metrics.uploadCalls=metrics.uploadCalls+1
     metrics.uploadedPixels=metrics.uploadedPixels+px
+    session.cache.touched[tile.key]=true
     return {x=tile.x+r.x,y=tile.y+r.y,width=r.width,height=r.height}
 end
 

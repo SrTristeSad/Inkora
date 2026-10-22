@@ -300,7 +300,15 @@ function UI:drawBrushPanel(app,x,w,h)
     self:slider(x+6,660,w-12,app.fillTolerance/0.3,"Tolerancia do balde",function(v)
         app.fillTolerance=v*0.3
     end,tostring(math.floor(app.fillTolerance*100+0.5)).."%")
-    self:print("B E H G I L R O | Shift + roda: tamanho",x,709,C.muted,self.small)
+    self:print("PONTA C++",x,679,C.white,self.small)
+    local tips={{"Redonda",0},{"Chata",1},{"Granulada",2}}
+    for i,t in ipairs(tips) do
+        local bx=x+(i-1)*81
+        self:button(bx,697,77,28,t[1],function()
+            app.brushTip=t[2]
+            app:statusMessage("Ponta nativa: "..t[1])
+        end,app.brushTip==t[2] and "primary" or nil)
+    end
 end
 
 function UI:drawLayersPanel(app,x,w,h)

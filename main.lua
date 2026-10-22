@@ -7,7 +7,7 @@ local palette = require("src.palette")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
-    brushHardness=0.82, brushSpacing=0.18,
+    brushHardness=0.82, brushSpacing=0.18, brushTip=0,
     fillTolerance=0.02, colorIndex=1, color=palette[1],
     zoom=1, offsetX=0, offsetY=0, dragging=nil,
     message="Bem-vindo ao Inkora! B: pincel | G: balde | I: conta-gotas",
@@ -93,6 +93,7 @@ function app:strokeStart(x,y)
     self.doc:checkpoint()
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
+        tip=self.brushTip,aspect=0.3,angle=25,grain=0.85,seed=239,
     })
     self.dragging={
         kind="draw",x=dx,y=dy,nativeStroke=nativeStroke,

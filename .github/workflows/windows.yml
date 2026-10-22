@@ -28,7 +28,7 @@ jobs:
       - name: Install graphics test dependencies
         run: sudo apt-get install -y love xvfb
       - name: Real LÖVE + C++ bridge test (virtual display)
-        run: INKORA_CORE_PATH="$PWD/build/native/libinkora_core.so" INKORA_REQUIRE_NATIVE=1 INKORA_TEST=1 xvfb-run -a timeout 45s love .
+        run: INKORA_TILE_LIMIT=8 INKORA_CORE_PATH="$PWD/build/native/libinkora_core.so" INKORA_REQUIRE_NATIVE=1 INKORA_TEST=1 xvfb-run -a timeout 60s love .
 
   windows-portable:
     name: Build portable Windows application

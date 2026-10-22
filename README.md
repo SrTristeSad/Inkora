@@ -4,7 +4,7 @@
 
 > **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
 
-> **Situação atual:** existe agora o primeiro **motor raster C++ v1 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
+> **Situação atual:** existe um **motor raster C++ v3 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
@@ -100,11 +100,11 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Rumo ao motor Lua + C++
 
-**Atualização do motor:** ABI C++ v2 mantém o espaçamento contínuo entre eventos e identifica as áreas alteradas. O módulo LuaJIT organiza a pintura em **tiles de 128×128**, reutiliza pixels em cache entre traços e faz upload apenas das regiões modificadas. Camadas novas e transparentes não precisam de leitura inicial da GPU. As ferramentas Lua antigas invalidam o cache antes de alterar o Canvas. O sistema ainda não oferece as otimizações e os pincéis do ibisPaint.
+**Atualização do motor:** a API C++ **v3** acrescenta pontas **redonda, chata e granulada**, com textura procedural determinística. O módulo LuaJIT gerencia tiles de 128×128 com **cache LRU limitado** (padrão: 96 tiles por camada, variável opcional `INKORA_TILE_LIMIT` para testes), reaproveita pixels entre traços e faz upload parcial. Tiles pintados expulsos do cache são recuperados da GPU. Camadas vazias iniciam sem readback. Isso ainda não equivale ao motor de pincéis profissional do ibisPaint.
 
-**Motor implementado na etapa anterior:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
+**Motor implementado inicialmente:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
 
-**Próxima prioridade:** medir desempenho, tratar textura/ponta avançada, pressão de mesa digitalizadora, modos de mesclagem e seleção.
+**Próxima prioridade:** medir latência e uso de memória, textura importada e formas de pontas personalizáveis, integração de pressão de mesa digitalizadora, modos de mesclagem e seleção.
 
 ## Limitações atuais e próximos passos
 

@@ -52,6 +52,29 @@ local function run()
         assert(Native.lastUpload.pixels==0,"Segmento vazio fez upload")
     end
     if stroke then print("INKORA_LUA_CPP_BRIDGE_OK") end
+    if stroke then
+        local nibDoc=Doc.new(96,64,"Nib GPU")
+        local flat=Brush.beginStroke(nibDoc.layers[1].canvas,{tip=1,aspect=0.2,angle=0})
+        Brush.segment(nibDoc.layers[1].canvas,25.5,22.5,25.5,22.5,
+            {1,0,0},22,1,false,flat)
+        local flatPixels=nibDoc.layers[1].canvas:newImageData()
+        local _,_,_,axisA=flatPixels:getPixel(33,22)
+        local _,_,_,thinA=flatPixels:getPixel(25,30)
+        assert(axisA>0.5 and thinA<0.05,"Ponta chata nao gerou elipse")
+        local grainDoc=Doc.new(96,64,"Chalk GPU")
+        local grainStroke=Brush.beginStroke(grainDoc.layers[1].canvas,{tip=2,grain=1,seed=239})
+        Brush.segment(grainDoc.layers[1].canvas,45.5,30.5,45.5,30.5,
+            {0,0,1},24,1,false,grainStroke)
+        local grainPixels=grainDoc.layers[1].canvas:newImageData()
+        local dark,light=0,0
+        for yy=22,38 do for xx=37,53 do
+            local _,_,_,alpha=grainPixels:getPixel(xx,yy)
+            if alpha>0.6 then dark=dark+1
+            elseif alpha>0 and alpha<0.08 then light=light+1 end
+        end end
+        assert(dark>0 and light>0,"Textura nativa sem variacao de alpha")
+        print("INKORA_CPP_TIP_PRESETS_OK")
+    end
     -- Alteracao direta do Canvas invalida os tiles de C++.
     Brush.shape(d.layers[1].canvas,"line",60,5,60,27,{0,1,0},3,1)
     if stroke then
@@ -99,6 +122,41 @@ local function run()
         print("INKORA_CROSS_TILE_STROKE_OK")
     end
 
+    -- LRU limitado: ao expulsar tiles ja pintados, o canvas ainda contem
+    -- a cor anterior, e recarregar o tile precisa usar readback (nao zero).
+    if stroke then
+        local stress=Doc.new(512,512,"Stress LRU")
+        Native.resetStats()
+        for gy=0,3 do
+            for gx=0,3 do
+                local sx=gx*128+36.5
+                local sy=gy*128+36.5
+                local pass=Brush.beginStroke(stress.layers[1].canvas)
+                Brush.segment(stress.layers[1].canvas,sx,sy,sx,sy,
+                    {1,0,0},12,1,false,pass)
+            end
+        end
+        assert(Native.cacheSize(stress.layers[1].canvas)<=Native.tileLimit(),
+            "Cache de tiles ultrapassou limite")
+        if Native.tileLimit()<16 then
+            local before=Native.stats()
+            assert(before.evictions>0,"Cache nao removeu tiles antigos")
+            local revisit=Brush.beginStroke(stress.layers[1].canvas)
+            Brush.segment(stress.layers[1].canvas,50.5,36.5,50.5,36.5,
+                {0,0,1},12,1,false,revisit)
+            local after=Native.stats()
+            assert(after.readbacks>before.readbacks,
+                "Tile pintado e expulso deveria ser relido")
+            local pixels=stress.layers[1].canvas:newImageData()
+            local rr,gg,bb,aa=pixels:getPixel(36,36)
+            assert(rr>0.8 and bb<0.2 and aa>0.8,
+                "Tile expulso perdeu pixels antigos")
+            local r2,g2,b2,a2=pixels:getPixel(50,36)
+            assert(b2>0.8 and r2<0.2 and a2>0.8,
+                "Tile recarregado nao recebeu novo traco")
+        end
+        print("INKORA_TILE_LRU_OK")
+    end
     assert(d:addLayer("Teste adicional"),"Criacao de camada falhou")
     assert(d:moveLayer(-1),"Movimentacao de camada falhou")
     assert(d:toggleLayer(1)==nil,"Alternancia de visibilidade invalida")
