@@ -34,6 +34,8 @@ end
 function Startup.new()
     return setmetatable({
         hits={},galleryScroll=0,thumbnailCache={},projects={},
+        galleryDetailKey=nil,gallerySelecting=false,gallerySelected={},
+        galleryModal=nil,galleryMenu=false,notice=nil,
         draft={name="Meu desenho",width="1280",height="1280",preset=1,focus=nil},
         fonts={
             logo=love.graphics.newFont(56),
@@ -70,6 +72,12 @@ function Startup:refreshGallery()
 end
 function Startup:openGallery(app)
     self:refreshGallery()
+    self.galleryDetailKey=nil
+    self.gallerySelecting=false
+    self.gallerySelected={}
+    self.galleryModal=nil
+    self.galleryMenu=false
+    self.notice=nil
     app.screen="gallery"
     self.error=nil
 end
@@ -263,71 +271,406 @@ function Startup:thumbnail(project)
     self.thumbnailCache[key]=false
     return nil
 end
-function Startup:drawGallery(app,w,h)
-    self:button("<  Inicio",40,29,140,42,"back-home",function()app.screen="home"end)
-    self:label("Minha galeria",54,103,self.fonts.title,C.light)
-    self:label(("%d %s"):format(#self.projects,#self.projects==1 and "obra" or "obras"),
-        57,141,self.fonts.small,C.muted)
-    self:button("+  Novo desenho",w-272,33,226,44,"open-create",
-        function()self:openCreate(app)end,true)
-    if #self.projects==0 then
-        local center=w/2
-        drawRect(center-115,h*0.35,230,175,C.panel,17)
-        self:mark(center,h*0.35+77,29)
-        self:label("Sua galeria esta vazia",center-255,h*0.35+207,
-            self.fonts.heading,C.light,510,"center")
-        self:label("Crie o primeiro desenho para comecar sua colecao.",
-            center-300,h*0.35+249,self.fonts.body,C.muted,600,"center")
-        self:button("+ Criar meu primeiro desenho",center-172,
-            math.min(h-116,h*0.35+299),344,50,"empty-create",
-            function()self:openCreate(app)end,true)
-        return
+-- The My Gallery screen follows the app's observable hierarchy:
+-- dark navigation header, light artwork gallery, dark bottom tool strip,
+-- and tapping a thumbnail opens its detail before editing.
+-- Layout, icons, text and all pixels are Inkora originals.
+local G={
+    bar={0.155,0.155,0.155},paper={0.960,0.956,0.919},
+    ink={0.18,0.19,0.20},muted={0.53,0.54,0.53},
+    blue={0.25,0.72,0.97},line={0.72,0.72,0.69},
+    white={1,1,1},shade={0.88,0.87,0.83},selected={0.16,0.67,0.96},
+}
+local function galleryIcon(kind,x,y,s)
+    love.graphics.setLineWidth(1.8)
+    if kind=="plus" then
+        love.graphics.line(x-s,y,x+s,y)
+        love.graphics.line(x,y-s,x,y+s)
+    elseif kind=="info" then
+        love.graphics.circle("line",x,y,s)
+        love.graphics.circle("fill",x,y-s*0.45,1.4)
+        love.graphics.line(x,y-1,x,y+s*0.56)
+    elseif kind=="share" then
+        love.graphics.rectangle("line",x-s*0.72,y-s*0.15,s*1.44,s*0.98)
+        love.graphics.line(x,y+s*0.15,x,y-s*1.0)
+        love.graphics.line(x-s*0.38,y-s*0.64,x,y-s*1.04,x+s*0.38,y-s*0.64)
+    elseif kind=="dots" then
+        for offset=-1,1 do love.graphics.circle("fill",x+offset*s*0.80,y,2.1) end
+    elseif kind=="play" then
+        love.graphics.polygon("line",x-s*0.45,y-s*0.9,x+s*0.8,y,x-s*0.45,y+s*0.9)
+    elseif kind=="back" then
+        love.graphics.line(x+s*0.42,y-s*0.75,x-s*0.25,y,x+s*0.42,y+s*0.75)
     end
-    local gap,margin,available=19,52,w-104
-    local columns=math.max(2,math.floor((available+gap)/257))
-    local cw=(available-(columns-1)*gap)/columns
-    local imageH=math.min(195,cw*0.70)
-    local ch,top=imageH+89,191
-    local rows=math.ceil(#self.projects/columns)
-    local viewportHeight=h-top-30
-    self.galleryMaxScroll=math.max(0,rows*(ch+gap)-gap-viewportHeight)
-    self.galleryScroll=clamp(self.galleryScroll,0,self.galleryMaxScroll)
-    love.graphics.setScissor(margin,top,available,viewportHeight)
-    for index,project in ipairs(self.projects) do
-        local col=(index-1)%columns
-        local row=math.floor((index-1)/columns)
-        local x=margin+col*(cw+gap)
-        local y=top+row*(ch+gap)-self.galleryScroll
-        if y+ch>top and y<top+viewportHeight then
-            drawRect(x,y,cw,ch,C.panel,12)
-            drawRect(x+8,y+8,cw-16,imageH,C.light,8)
-            local img=self:thumbnail(project)
-            if img then
-                local iw,ih=img:getDimensions()
-                local s=math.min((cw-16)/iw,imageH/ih)
-                love.graphics.setColor(C.white)
-                love.graphics.draw(img,x+(cw-iw*s)/2,y+8+(imageH-ih*s)/2,0,s,s)
-            else
-                self:label("INKORA",x+18,y+imageH/2,self.fonts.heading,
-                    C.raised,cw-36,"center")
-            end
-            self:label(project.name,x+13,y+imageH+17,
-                self.fonts.body,C.light,cw-26)
-            self:label(project.width and
-                    (project.width.." x "..project.height.." px") or "Projeto Inkora",
-                x+13,y+imageH+48,self.fonts.small,C.muted,cw-26)
-            self:hit(x,y,cw,ch,"open-artwork",
-                function()app:openArtwork(project.key)end)
-        end
-    end
-    love.graphics.setScissor()
-    if self.galleryMaxScroll>0 then
-        local track=viewportHeight
-        local grip=math.max(30,track*viewportHeight/(viewportHeight+self.galleryMaxScroll))
-        drawRect(w-18,top+track*(self.galleryScroll/(viewportHeight+self.galleryMaxScroll)),
-            5,grip,C.accent,3)
+    love.graphics.setLineWidth(1)
+end
+
+function Startup:galleryProject(key)
+    for _,p in ipairs(self.projects) do
+        if p.key==key then return p end
     end
 end
+function Startup:galleryCurrentKey()
+    if self.galleryDetailKey then return self.galleryDetailKey end
+    for _,p in ipairs(self.projects) do
+        if self.gallerySelected[p.key] then return p.key end
+    end
+    return nil
+end
+function Startup:gallerySelectedKeys()
+    local keys={}
+    for _,p in ipairs(self.projects) do
+        if self.gallerySelected[p.key] then keys[#keys+1]=p.key end
+    end
+    return keys
+end
+function Startup:gallerySelectToggle(key)
+    self.gallerySelected[key]=not self.gallerySelected[key] or nil
+end
+function Startup:galleryToggleSelection()
+    self.gallerySelecting=not self.gallerySelecting
+    self.gallerySelected={}
+    self.galleryDetailKey=nil
+    self.galleryMenu=false
+end
+function Startup:galleryOpenDetail(key)
+    if self.gallerySelecting then self:gallerySelectToggle(key)
+    else self.galleryDetailKey=key;self.galleryMenu=false end
+end
+function Startup:galleryEdit(app)
+    local key=self:galleryCurrentKey()
+    if key then
+        if not app:openArtwork(key) then
+            self.notice="Falha ao abrir a obra."
+        end
+    end
+end
+function Startup:galleryExport()
+    local key=self:galleryCurrentKey()
+    if not key then return end
+    local ok,result=pcall(function()
+        return Document.load(key):exportPNG()
+    end)
+    self.notice=ok and ("PNG exportado: "..result) or
+        ("Falha ao exportar PNG: "..tostring(result))
+end
+function Startup:galleryRename()
+    local key=self:galleryCurrentKey()
+    local p=key and self:galleryProject(key)
+    if not p then return end
+    self.galleryMenu=false
+    self.galleryModal={kind="rename",key=key,value=p.name}
+end
+function Startup:galleryDuplicate()
+    local key=self:galleryCurrentKey()
+    if not key then return end
+    self.galleryMenu=false
+    local ok,result=pcall(Document.duplicateProject,key)
+    if not ok then
+        self.notice="Falha ao duplicar: "..tostring(result)
+        return
+    end
+    self:refreshGallery()
+    self.gallerySelected={}
+    self.gallerySelecting=false
+    self.galleryDetailKey=result
+    self.notice="Copia criada. A obra original foi preservada."
+end
+function Startup:galleryAskTrash()
+    local keys=self:gallerySelectedKeys()
+    if self.galleryDetailKey then keys={self.galleryDetailKey} end
+    if #keys==0 then return end
+    self.galleryMenu=false
+    self.galleryModal={kind="trash",keys=keys}
+end
+function Startup:galleryTrashConfirmed()
+    local modal=self.galleryModal
+    if not modal or modal.kind~="trash" then return end
+    local count=0
+    local failure=nil
+    for _,key in ipairs(modal.keys) do
+        local ok,err=pcall(Document.trashProject,key)
+        if ok then count=count+1 else failure=tostring(err) end
+    end
+    self.galleryModal=nil
+    self:refreshGallery()
+    self.galleryDetailKey=nil
+    self.gallerySelecting=false
+    self.gallerySelected={}
+    self.notice=failure and ("Erro na lixeira: "..failure) or
+        (count.." obra(s) movida(s) para a lixeira.")
+end
+function Startup:galleryRestore()
+    self.galleryMenu=false
+    local deleted=Document.listProjects("deleted")
+    if #deleted==0 then
+        self.notice="A lixeira esta vazia."
+        return
+    end
+    local ok,result=pcall(Document.restoreProject,deleted[1].key)
+    if not ok then self.notice="Falha ao restaurar: "..tostring(result);return end
+    self:refreshGallery()
+    self.galleryDetailKey=result
+    self.notice="Obra restaurada da lixeira."
+end
+function Startup:galleryConfirmRename()
+    local modal=self.galleryModal
+    if not modal or modal.kind~="rename" then return end
+    local ok,result=pcall(Document.renameProject,modal.key,modal.value)
+    if not ok then
+        modal.error=tostring(result)
+        return
+    end
+    self.galleryModal=nil
+    self:refreshGallery()
+    self.notice="Nome alterado para "..result
+end
+
+function Startup:galleryTool(x,y,kind,action,disabled)
+    love.graphics.setColor(disabled and {0.46,0.47,0.47} or G.blue)
+    galleryIcon(kind,x+20,y+23,12)
+    if not disabled and action then
+        self:hit(x,y,40,46,kind=="plus" and "open-create" or "tool-"..kind,action)
+    end
+end
+
+function Startup:galleryTile(project,x,y,thumbW,thumbH,index)
+    local cardH=thumbH+33
+    local mouseX,mouseY=love.mouse.getPosition()
+    local hovered=inside(mouseX,mouseY,{x=x,y=y,w=thumbW,h=cardH})
+    drawRect(x-2,y-2,thumbW+4,thumbH+4,G.line,1)
+    drawRect(x,y,thumbW,thumbH,G.white,1)
+    local img=self:thumbnail(project)
+    if img then
+        local iw,ih=img:getDimensions()
+        local scale=math.min((thumbW-6)/iw,(thumbH-6)/ih)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(img,x+(thumbW-iw*scale)/2,
+            y+(thumbH-ih*scale)/2,0,scale,scale)
+    else
+        self:label("INKORA",x+4,y+thumbH/2-8,self.fonts.small,G.muted,
+            thumbW-8,"center")
+    end
+    if self.gallerySelected[project.key] then
+        love.graphics.setLineWidth(3.5)
+        love.graphics.setColor(G.selected)
+        love.graphics.rectangle("line",x-4,y-4,thumbW+8,thumbH+8,6)
+        love.graphics.circle("fill",x+thumbW-11,y+12,9)
+        love.graphics.setColor(G.white)
+        love.graphics.line(x+thumbW-15,y+12,x+thumbW-11,y+16,
+            x+thumbW-6,y+8)
+        love.graphics.setLineWidth(1)
+    elseif hovered then
+        love.graphics.setColor(G.blue)
+        love.graphics.setLineWidth(1.5)
+        love.graphics.rectangle("line",x-2,y-2,thumbW+4,thumbH+4,2)
+        love.graphics.setLineWidth(1)
+    end
+    self:label(project.name,x-6,y+thumbH+7,self.fonts.small,G.ink,
+        thumbW+12,"center")
+    self:hit(x-4,y-4,thumbW+8,cardH+5,"gallery-art-"..index,
+        function()self:galleryOpenDetail(project.key)end)
+end
+
+function Startup:drawGallery(app,w,h)
+    local headerH=48
+    local subH=39
+    local footerH=57
+    drawRect(0,0,w,h,G.paper)
+    drawRect(0,0,w,headerH,G.bar)
+    drawRect(0,h-footerH,w,footerH,G.bar)
+    -- Real app's gallery is a neutral cream, not our earlier navy dashboard.
+    self:label("Minha Galeria ("..#self.projects..")",0,12,
+        self.fonts.body,G.white,w,"center")
+    love.graphics.setColor(G.blue)
+    galleryIcon("back",17,23,11)
+    self:label("Voltar",29,13,self.fonts.small,G.blue)
+    self:hit(0,0,93,headerH,"back-home",function()
+        if self.galleryDetailKey then
+            self.galleryDetailKey=nil
+        elseif self.gallerySelecting then
+            self:galleryToggleSelection()
+        else app.screen="home" end
+        self.galleryMenu=false
+    end)
+    if not self.galleryDetailKey then
+        local text=self.gallerySelecting and "Concluir" or "Selecionar"
+        self:label(text,w-109,14,self.fonts.small,G.blue,101,"center")
+        self:hit(w-120,0,119,headerH,"gallery-select",
+            function()self:galleryToggleSelection()end)
+    end
+    local contentTop=headerH+subH
+    if not self.galleryDetailKey then
+        drawRect(0,headerH,w,subH,G.white)
+        self:label("Projetos neste dispositivo",15,headerH+12,
+            self.fonts.small,G.ink)
+        self:label(#self.projects.." obras",w-115,headerH+12,
+            self.fonts.small,G.muted,100,"right")
+        if #self.projects==0 then
+            self:label("Ainda nao existem desenhos.",0,
+                math.max(contentTop+80,h*0.44),
+                self.fonts.body,G.muted,w,"center")
+            self:label("Pressione '+' para criar sua primeira obra.",0,
+                math.max(contentTop+111,h*0.44+28),
+                self.fonts.small,G.muted,w,"center")
+        else
+            local thumbW=clamp(math.floor(w*0.15),148,192)
+            local thumbH=clamp(math.floor(thumbW*1.15),172,215)
+            local cellW=thumbW+28
+            local cellH=thumbH+58
+            local margin=25
+            local columns=math.max(1,math.floor((w-2*margin+22)/cellW))
+            local gridWidth=columns*cellW
+            local x0=(w-gridWidth)/2+14
+            local y0=contentTop+26
+            local rows=math.ceil(#self.projects/columns)
+            local visibleH=h-footerH-y0-15
+            self.galleryMaxScroll=math.max(0,rows*cellH-visibleH)
+            self.galleryScroll=clamp(self.galleryScroll,0,self.galleryMaxScroll)
+            love.graphics.setScissor(0,contentTop,w,h-footerH-contentTop)
+            for i,project in ipairs(self.projects) do
+                local col=(i-1)%columns
+                local row=math.floor((i-1)/columns)
+                local x=x0+col*cellW
+                local y=y0+row*cellH-self.galleryScroll
+                if y+cellH>contentTop and y<h-footerH then
+                    self:galleryTile(project,x,y,thumbW,thumbH,i)
+                end
+            end
+            love.graphics.setScissor()
+            if self.galleryMaxScroll>0 then
+                local track=h-footerH-contentTop
+                local grip=math.max(27,track*track/(track+self.galleryMaxScroll))
+                drawRect(w-8,contentTop+track*self.galleryScroll/
+                    (track+self.galleryMaxScroll),4,grip,G.muted,2)
+            end
+        end
+    else
+        local project=self:galleryProject(self.galleryDetailKey)
+        if not project then
+            self.galleryDetailKey=nil
+            return
+        end
+        local available=h-footerH-headerH
+        local previewW=math.min(w-160,math.floor(available*0.96),660)
+        local previewH=math.max(120,available-100)
+        local x=(w-previewW)/2
+        local y=headerH+24
+        drawRect(x-2,y-2,previewW+4,previewH+4,G.line,1)
+        drawRect(x,y,previewW,previewH,G.white)
+        local img=self:thumbnail(project)
+        if img then
+            local iw,ih=img:getDimensions()
+            local scale=math.min(previewW/iw,previewH/ih)
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(img,x+(previewW-iw*scale)/2,
+                y+(previewH-ih*scale)/2,0,scale,scale)
+        end
+        self:label(project.name,x,y+previewH+12,self.fonts.body,G.ink,previewW)
+        self:label((project.width or "?").." x "..(project.height or "?").." px",
+            x,y+previewH+13,self.fonts.small,G.muted,previewW,"right")
+    end
+    -- Functional bottom command strip. Unsupported video playback deliberately
+    -- appears disabled; do not pretend that timelapse has been implemented.
+    local fy=h-footerH+5
+    if self.gallerySelecting then
+        local n=#self:gallerySelectedKeys()
+        self:label(n.." selecionada(s)",16,fy+14,self.fonts.small,G.white)
+        self:label("Duplicar",w-240,fy+14,self.fonts.small,
+            n==1 and G.blue or G.muted)
+        if n==1 then self:hit(w-253,fy,96,45,"tool-duplicate",
+            function()self:galleryDuplicate()end) end
+        self:label("Lixeira",w-120,fy+14,self.fonts.small,
+            n>0 and G.blue or G.muted)
+        if n>0 then self:hit(w-131,fy,118,45,"tool-trash",
+            function()self:galleryAskTrash()end) end
+    else
+        self:galleryTool(10,fy,"plus",function()self:openCreate(app)end)
+        local active=self:galleryCurrentKey()~=nil
+        self:galleryTool(71,fy,"info",function()
+            local key=self:galleryCurrentKey()
+            if key then self.galleryDetailKey=key end
+        end,not active)
+        self:galleryTool(130,fy,"play",nil,true)
+        self:galleryTool(189,fy,"share",function()self:galleryExport()end,not active)
+        self:galleryTool(250,fy,"dots",function()
+            self.galleryMenu=not self.galleryMenu
+        end)
+        self:label("Editar",w-81,fy+15,self.fonts.small,
+            active and G.blue or G.muted,70,"center")
+        if active then
+            self:hit(w-92,fy,91,45,"gallery-edit",
+                function()self:galleryEdit(app)end)
+        end
+    end
+    if self.galleryMenu then
+        local mw=206
+        local mx=math.min(w-218,248)
+        local my=h-footerH-192
+        local items={
+            {"Renomear",function()self:galleryRename()end,
+                self:galleryCurrentKey()~=nil},
+            {"Duplicar",function()self:galleryDuplicate()end,
+                self:galleryCurrentKey()~=nil},
+            {"Mover para lixeira",function()self:galleryAskTrash()end,
+                self:galleryCurrentKey()~=nil},
+            {"Restaurar ultima obra",function()self:galleryRestore()end,true},
+        }
+        drawRect(mx,my,mw,#items*44,G.bar,4)
+        for i,item in ipairs(items) do
+            local iy=my+(i-1)*44
+            self:label(item[1],mx+12,iy+13,self.fonts.small,
+                item[3] and G.white or G.muted,mw-24)
+            if item[3] then self:hit(mx,iy,mw,44,
+                "gallery-menu-"..i,item[2]) end
+        end
+    end
+    if self.notice and not self.galleryMenu then
+        drawRect(0,h-footerH-37,w,37,G.bar)
+        self:label(self.notice,12,h-footerH-27,self.fonts.small,
+            G.white,w-20)
+    end
+end
+
+function Startup:drawGalleryModal(app,w,h)
+    local modal=self.galleryModal
+    if not modal then return end
+    self.hits={}
+    love.graphics.setColor(0,0,0,0.65)
+    love.graphics.rectangle("fill",0,0,w,h)
+    local width=math.min(470,w-80)
+    local x=(w-width)/2
+    local y=h/2-125
+    drawRect(x,y,width,255,G.bar,8)
+    if modal.kind=="rename" then
+        self:label("Renomear obra",x+23,y+22,self.fonts.heading,G.white)
+        self:label("Nome do desenho",x+23,y+71,self.fonts.small,G.white)
+        drawRect(x+22,y+97,width-44,46,G.white,4)
+        self:label(modal.value.."|",x+36,y+110,
+            self.fonts.body,G.ink,width-74)
+        if modal.error then self:label(modal.error,x+24,y+155,
+            self.fonts.small,C.gold,width-46) end
+        self:label("Cancelar",x+35,y+214,self.fonts.body,G.white)
+        self:hit(x+17,y+196,width/2-18,50,"modal-cancel",
+            function()self.galleryModal=nil end)
+        self:label("Salvar",x+width-112,y+214,self.fonts.body,G.blue)
+        self:hit(x+width/2,y+196,width/2-14,50,"modal-confirm",
+            function()self:galleryConfirmRename()end)
+    elseif modal.kind=="trash" then
+        self:label("Mover para a lixeira?",x+22,y+28,
+            self.fonts.heading,G.white,width-44)
+        self:label(#modal.keys.." obra(s) serao arquivadas localmente.",
+            x+23,y+88,self.fonts.body,G.white,width-46)
+        self:label("Voce pode restaurar pela opcao de menu.",
+            x+23,y+122,self.fonts.small,G.white,width-46)
+        self:label("Cancelar",x+35,y+214,self.fonts.body,G.white)
+        self:hit(x+17,y+196,width/2-18,50,"modal-cancel",
+            function()self.galleryModal=nil end)
+        self:label("Mover",x+width-104,y+214,self.fonts.body,G.blue)
+        self:hit(x+width/2,y+196,width/2-14,50,"modal-confirm",
+            function()self:galleryTrashConfirmed()end)
+    end
+end
+
 function Startup:choosePreset(index)
     local p=PRESETS[index]
     if not p then return end
@@ -425,7 +768,9 @@ function Startup:draw(app)
     local w,h=love.graphics.getDimensions()
     self:drawBackground(w,h)
     if app.screen=="home" then self:drawHome(app,w,h)
-    elseif app.screen=="gallery" then self:drawGallery(app,w,h)
+    elseif app.screen=="gallery" then
+        self:drawGallery(app,w,h)
+        self:drawGalleryModal(app,w,h)
     elseif app.screen=="create" then self:drawCreate(app,w,h)
     end
     if self.error and app.screen~="create" then
@@ -443,12 +788,43 @@ function Startup:click(x,y)
     return false
 end
 function Startup:wheel(delta)
+    if self.galleryDetailKey or self.galleryModal then return end
     if self.galleryMaxScroll and self.galleryMaxScroll>0 then
         self.galleryScroll=clamp(self.galleryScroll-delta*75,0,self.galleryMaxScroll)
     end
 end
 function Startup:keypressed(app,key)
-    if app.screen=="gallery" and key=="escape" then app.screen="home";return true end
+    if app.screen=="gallery" then
+        local modal=self.galleryModal
+        if modal then
+            if key=="escape" then self.galleryModal=nil
+            elseif modal.kind=="rename" then
+                if key=="backspace" then
+                    local utf8=require("utf8")
+                    local at=utf8.offset(modal.value,-1)
+                    if at then modal.value=modal.value:sub(1,at-1) end
+                elseif key=="return" or key=="kpenter" then
+                    self:galleryConfirmRename()
+                end
+            elseif modal.kind=="trash" and (key=="return" or key=="kpenter") then
+                self:galleryTrashConfirmed()
+            end
+            return true
+        end
+        if key=="escape" then
+            if self.galleryMenu then self.galleryMenu=false
+            elseif self.galleryDetailKey then self.galleryDetailKey=nil
+            elseif self.gallerySelecting then self:galleryToggleSelection()
+            else app.screen="home" end
+            return true
+        elseif key=="return" or key=="kpenter" then
+            if self.galleryDetailKey then self:galleryEdit(app) end
+            return true
+        elseif key=="delete" or key=="backspace" then
+            self:galleryAskTrash()
+            return true
+        end
+    end
     if app.screen=="create" then
         if key=="escape" then self:openGallery(app);return true end
         local d=self.draft
@@ -470,6 +846,12 @@ function Startup:keypressed(app,key)
     return false
 end
 function Startup:textinput(text)
+    if self.galleryModal and self.galleryModal.kind=="rename" then
+        local modal=self.galleryModal
+        modal.value=(modal.value..text:gsub("[\r\n\t]"," ")):sub(1,64)
+        modal.error=nil
+        return
+    end
     local d=self.draft
     if d.focus=="name" then
         d.name=(d.name..text:gsub("[\r\n\t]","")):sub(1,64)
