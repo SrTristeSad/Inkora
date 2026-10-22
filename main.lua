@@ -714,7 +714,10 @@ end
 function love.mousepressed(x,y,button,istouch)
     if istouch then return end
     if app.screen~="editor" then
-        if button==1 then app.startup:click(x,y) end
+        if button==1 then
+            if app.screen=="gallery" then app.startup:pointerPressed(x,y)
+            else app.startup:click(x,y) end
+        end
         return
     end
     if button==1 and app.ui:click(x,y) then return end
@@ -733,7 +736,11 @@ function love.mousepressed(x,y,button,istouch)
 end
 
 function love.mousemoved(x,y,dx,dy,istouch)
-    if istouch or app.screen~="editor" then return end
+    if istouch then return end
+    if app.screen~="editor" then
+        if app.screen=="gallery" then app.startup:pointerMoved(x,y) end
+        return
+    end
     if app.ui:mousemoved(x,y) then return end
     if not app.dragging then return end
     if app.dragging.kind=="pan" then
@@ -746,7 +753,13 @@ function love.mousemoved(x,y,dx,dy,istouch)
 end
 
 function love.mousereleased(x,y,button,istouch)
-    if istouch or app.screen~="editor" then return end
+    if istouch then return end
+    if app.screen~="editor" then
+        if app.screen=="gallery" and button==1 then
+            app.startup:pointerReleased(x,y)
+        end
+        return
+    end
     if button==1 then
         app.ui:mousereleased()
         if app.dragging and app.dragging.kind=="draw" then
@@ -766,7 +779,8 @@ end
 -- This does not replace WinTab/Windows Ink tablet integration.
 function love.touchpressed(id,x,y,dx,dy,pressure)
     if app.screen~="editor" then
-        app.startup:click(x,y)
+        if app.screen=="gallery" then app.startup:pointerPressed(x,y)
+        else app.startup:click(x,y) end
         return
     end
     if app.activeTouch then return end
@@ -782,7 +796,11 @@ function love.touchpressed(id,x,y,dx,dy,pressure)
 end
 
 function love.touchmoved(id,x,y,dx,dy,pressure)
-    if app.screen~="editor" or id~=app.activeTouch then return end
+    if app.screen~="editor" then
+        if app.screen=="gallery" then app.startup:pointerMoved(x,y) end
+        return
+    end
+    if id~=app.activeTouch then return end
     if app.ui:mousemoved(x,y) then return end
     if app.dragging and app.dragging.kind=="pan" then
         app.offsetX=app.offsetX+dx
@@ -797,7 +815,11 @@ function love.touchmoved(id,x,y,dx,dy,pressure)
 end
 
 function love.touchreleased(id,x,y,dx,dy,pressure)
-    if app.screen~="editor" or id~=app.activeTouch then return end
+    if app.screen~="editor" then
+        if app.screen=="gallery" then app.startup:pointerReleased(x,y) end
+        return
+    end
+    if id~=app.activeTouch then return end
     app.ui:mousereleased()
     if app.dragging and app.dragging.kind=="draw" then
         app:strokeEnd(x,y,pressure)
