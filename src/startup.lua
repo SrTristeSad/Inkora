@@ -560,7 +560,7 @@ function Startup:galleryTool(x,y,kind,action,disabled)
     love.graphics.setColor(disabled and {0.46,0.47,0.47} or G.blue)
     galleryIcon(kind,x+20,y+23,12)
     if not disabled and action then
-        self:hit(x,y,40,46,kind=="plus" and "open-create" or "tool-"..kind,action)
+        self:hit(x,y,40,46,"tool-"..kind,action)
     end
 end
 
