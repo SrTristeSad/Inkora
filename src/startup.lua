@@ -918,7 +918,9 @@ function Startup:drawNewDialog(app,w,h)
         self:label(d[field]..(modal.focus==field and "|" or ""),
             x+2,fieldY+7,self.fonts.body,G.ink,fieldW-4,"center")
         self:hit(x,fieldY,fieldW,34,"new-focus-"..field,function()
+            -- On mobile tapping an amount selects it for replacement.
             modal.focus=field
+            modal.replaceField=field
         end)
     end
     field("L","width",px+107)
@@ -1389,8 +1391,52 @@ function Startup:draw(app)
 end
 -- Drag artworks onto folders, onto another artwork to create a group,
 -- or onto Back to send them to the parent folder.
+-- Continuous pointer/touch sliders in the New Canvas sheet.
+-- Previous implementation exposed a dozen tap regions but could not drag.
+function Startup:setNewSliderValue(kind,x)
+    local modal=self.galleryModal
+    if not modal or modal.kind~="new" then return end
+    local w=love.graphics.getWidth()
+    local panelW=math.min(446,w-32)
+    local px=clamp(math.floor(w*0.52),16,w-panelW-16)
+    local start,finish
+    if kind=="quality" then
+        start,finish=px+64,px+panelW-62
+        modal.quality=clamp((x-start)/(finish-start),0,1)
+        return
+    end
+    if kind~="width" and kind~="height" then return end
+    start,finish=px+117,px+panelW-75
+    local fraction=clamp((x-start)/(finish-start),0,1)
+    local value=math.floor(64+4032*fraction+0.5)
+    self.draft[kind]=tostring(value)
+    self.draft.preset=nil
+    modal.replaceField=nil
+    self.error=nil
+end
+
 function Startup:pointerPressed(x,y)
-    if self.galleryModal then return self:click(x,y) end
+    if self.galleryModal then
+        if self.galleryModal.kind=="new" then
+            for i=#self.hits,1,-1 do
+                local hit=self.hits[i]
+                if inside(x,y,hit) then
+                    local kind=hit.kind:match("^new%-slider%-(width)")
+                        or hit.kind:match("^new%-slider%-(height)")
+                    if hit.kind:match("^new%-quality%-") then
+                        kind="quality"
+                    end
+                    if kind then
+                        self.newSliderDrag=kind
+                        self:setNewSliderValue(kind,x)
+                        return true
+                    end
+                    break
+                end
+            end
+        end
+        return self:click(x,y)
+    end
     local hit
     for i=#self.hits,1,-1 do
         if inside(x,y,self.hits[i]) then hit=self.hits[i];break end
@@ -1413,6 +1459,10 @@ function Startup:pointerPressed(x,y)
     return self:click(x,y)
 end
 function Startup:pointerMoved(x,y)
+    if self.newSliderDrag then
+        self:setNewSliderValue(self.newSliderDrag,x)
+        return
+    end
     local d=self.galleryDrag
     if d then
         d.x,d.y=x,y
@@ -1423,6 +1473,11 @@ function Startup:pointerMoved(x,y)
     end
 end
 function Startup:pointerReleased(x,y)
+    if self.newSliderDrag then
+        self:setNewSliderValue(self.newSliderDrag,x)
+        self.newSliderDrag=nil
+        return
+    end
     if self.folderTitlePress then
         local press=self.folderTitlePress
         self.folderTitlePress=nil
@@ -1533,7 +1588,13 @@ function Startup:keypressed(app,key)
                 if key=="tab" then
                     modal.focus=modal.focus=="width" and "height" or "width"
                 elseif key=="backspace" and modal.focus then
-                    self.draft[modal.focus]=self.draft[modal.focus]:sub(1,-2)
+                    if modal.replaceField==modal.focus then
+                        self.draft[modal.focus]=""
+                        modal.replaceField=nil
+                    else
+                        self.draft[modal.focus]=self.draft[modal.focus]:sub(1,-2)
+                    end
+                    self.draft.preset=nil
                 elseif key=="return" or key=="kpenter" then
                     if self:submit(app) then self.galleryModal=nil end
                 end
@@ -1605,9 +1666,15 @@ function Startup:textinput(text)
     if self.galleryModal and self.galleryModal.kind=="new" then
         local focus=self.galleryModal.focus
         if focus=="width" or focus=="height" then
-            self.draft[focus]=(self.draft[focus]..text:gsub("%D","")):sub(1,4)
-            self.draft.preset=nil
-            self.error=nil
+            local digits=text:gsub("%D","")
+            if digits~="" then
+                local base=self.galleryModal.replaceField==focus and "" or
+                    self.draft[focus]
+                self.draft[focus]=(base..digits):sub(1,4)
+                self.galleryModal.replaceField=nil
+                self.draft.preset=nil
+                self.error=nil
+            end
         end
         return
     end
