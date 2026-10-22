@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v12: pigmento amostrado por cada carimbo com cache RGBA e igualdade entre tiles; testes CI** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v12: posições de carimbos e amostragem pré-pintura; textura/direção, blend, máscaras e clipping** |
+| Motor gráfico Inkora em C++ | **C++ ABI v13: preserva pincel v12 e acrescenta balde contíguo em C++ com bounding box de dirty pixels; testes CI** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v13: balde C++ por região, pincel v12 preservado; textura/direção, blend, máscaras e clipping** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; build automático. Execução/mesa real Windows ainda sem validação** |
 | Entrada de caneta Windows | **Ponte WinTab experimental via LuaJIT FFI, sem interceptar SDL, com curvas de pressão e fallback; teste com driver físico pendente** |
 | Android sobre o mesmo núcleo | **Futuro** |
@@ -63,7 +63,7 @@
 - [x] Histórico de pincel/borracha por tiles de 128×128 com captura única por bloco, swap em desfazer/refazer, invalidação do cache nativo e preservação dos snapshots estruturais.
 - [x] Indicador visível de passos e MiB RGBA estimados no cabeçalho e testes GPU de histórico misto, transparência e costuras de tiles.
 - [x] Snapshots de camadas estruturais por referências imutáveis e cópia sob escrita de Canvas/máscara, incluindo restauração de histórico misto e estimativa de memória sem duplicar buffers compartilhados.
-- [x] Orçamento lógico de 256 MiB para buffers RGBA do histórico, preservando ao menos um passo e avisando no cabeçalho quando uma única operação excede o limite; testes GPU de budget para strokes e substituição estrutural. **Não é um teto físico de RAM/VRAM.**\n- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, orçamento **físico** de memória do histórico e renderização incremental progressiva.
+- [x] Orçamento lógico de 256 MiB para buffers RGBA do histórico, preservando ao menos um passo e avisando no cabeçalho quando uma única operação excede o limite; testes GPU de budget para strokes e substituição estrutural. **Não é um teto físico de RAM/VRAM.**\n- [x] Balde contíguo C++ v13 com atualização GPU apenas da região alterada, histórico de preenchimento por tiles e testes C++/Lua de seleção, Alpha Lock e undo/redo. Ainda lê o Canvas inteiro para descobrir a região.\n- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, orçamento **físico** de memória do histórico e renderização incremental progressiva.
 - [ ] Seleção com laço, varinha, elipse, feathering e suporte nas ferramentas de formas.
 - [ ] Selecao e transformacoes: laço, varinha, mover, redimensionar, rotacionar (retângulo básico já implementado).
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.
