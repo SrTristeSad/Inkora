@@ -25,10 +25,12 @@ Referencias publicas consultadas:
 | --- | --- | --- | --- |
 | Cabecalho "Minha Galeria", Voltar e Selecionar | Capturas oficiais citadas | Barra superior grafite e acoes reais | Medicao pixel a pixel de proporcoes/gestos |
 | Galeria vazia clara e botao + inferior | Tutorial 02 | Fundo creme, estado vazio e + funcional | Sincronizacao real |
-| Grade de miniaturas com titulo | Tutorial 20 | Miniaturas PNG reais do projeto, grid rolavel | Pastas, rearranjo manual e indice temporal |
+| Grade de miniaturas com titulo | Tutorial 20 | Miniaturas PNG reais do projeto, grid rolavel | Rearranjo manual livre e indice temporal |
 | Abrir miniatura e depois Editar | Tutorial 20 | Tela de detalhe, Editar entra no editor Lua/C++ | Gestos de flick e metadados de tempo de desenho |
 | Gerenciamento de obras | Acao contextual documentada no ibisPaint | Renomear sem alterar pixels, duplicar, mover para lixeira com confirmacao, restaurar ultimo item | Lixeira de 30 dias, compartilhamento online |
 | Video timelapse | Tutorial 20 | Botao visivelmente desabilitado | Gravacao e replay, ainda nao implementados |
+
+Comportamento de **grupos/pastas** confirmado no tutorial oficial [30. Artworks Folder Feature](https://ibispaint.com/lecture/index.jsp?no=193): ao tocar em + o aplicativo oferece Pasta no menu Novo; folders podem conter outras pastas; arrastar uma obra ate uma pasta move essa obra; arrastar obra sobre obra cria grupo; o botao Voltar serve como destino para tirar a obra da pasta; selecao multipla e icone de pasta permitem mover varias obras. Inkora agora implementa cada uma dessas interacoes por armazenamento de IDs em `gallery-folders.txt`, independente dos raster PNG; ainda nao replica drag de reordenacao entre posicoes dentro da mesma grade nem sincronizacao em nuvem.
 
 Esta eh engenharia reversa **do comportamento publicamente observavel**. O Inkora nao usa imagens, icones proprietarios ou codigo do ibisPaint e ainda nao teve validacao manual lado a lado com o binario do app.
 
