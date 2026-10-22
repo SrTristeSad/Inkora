@@ -703,6 +703,9 @@ local function run(app)
             math.abs(app.brushPigmentLoad-0.38)<0.001,
             "Restaurar nao recuperou o preset Aquarela")
         app.color=priorColor
+        -- Later cursor-placement smoke checks require an opaque solid nib:
+        -- they must not inherit the semi-transparent watercolor preset.
+        assert(app:choosePreset("ink"))
         UI.tab="brush"
         love.draw()
         print("INKORA_WET_PAINT_PREVIEW_PROFILES_OK")
