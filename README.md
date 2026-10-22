@@ -4,7 +4,7 @@
 
 > **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
 
-> **Situação atual:** existe um **motor raster C++ v6 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
+> **Situação atual:** existe um **motor raster C++ v7 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte usa tiles de 128×128, carregados sob demanda e mantidos em cache entre pinceladas, sem leitura integral por traço.
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
@@ -35,7 +35,7 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 - Escolha de cores por paleta, tamanho, opacidade do traço e estabilização.
 - Painéis separados para pincéis e camadas, com controles deslizantes arrastáveis.
 - Novo documento com largura e altura configuráveis (64 a 4096 px).
-- Camadas transparentes: criar, excluir, ordenar, ocultar, controlar opacidade, ativar Alpha Lock e escolher modos de mesclagem (Normal, Multiply, Screen, Add e Overlay).
+- Camadas transparentes: criar, excluir, ordenar, ocultar, controlar opacidade, ativar Alpha Lock, criar/inverter/remover máscara, ativar clipping e escolher modos de mesclagem (Normal, Multiply, Screen, Add e Overlay).
 - Seleção retangular temporária (M, arrastar, Ctrl+D para limpar) que restringe pincel, borracha e balde na área selecionada.
 - Desfazer/refazer com histórico limitado de snapshots.
 - Zoom ancorado no cursor, pan com botão do meio ou Espaço + arrastar, ajuste da tela.
@@ -105,7 +105,9 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Rumo ao motor Lua + C++
 
-**Atualização do motor:** a API C++ **v6** acrescenta **Alpha Lock** na camada e **seleção retangular** para restringir o pincel, respeitando as bordas mesmo ao atravessar tiles. O balde de tinta também respeita seleção e Alpha Lock. A seleção é temporária (não vai para o projeto); Alpha Lock é salvo e participa de undo/redo. O atalho **M** seleciona; **Ctrl+D** ou **Esc** limpa a seleção. O botão de bloqueio está na aba Camadas. **Limitação:** linha, retângulo e elipse ficam bloqueados enquanto houver seleção/Alpha Lock, até receberem a mesma proteção por pixel. A borracha com Alpha Lock ligado não apaga.
+**Atualização atual (C++ v7):** **máscaras de camada** e **clipping** reais no compositor nativo. A máscara da camada é criada a partir da seleção retangular ativa (ou inteiramente branca se não houver seleção), pode ser invertida e removida. O clipping usa a transparência da camada imediatamente abaixo, combinada com sua máscara e opacidade; uma camada-base oculta torna a camada recortada invisível. Máscaras e clipping participam de desfazer/refazer, reabertura do projeto e exportação PNG. O manifesto anterior segue compatível, com arquivos `mask-NN.png` por camada. **Limitações:** ainda não há pintura direta na máscara, clipping em cadeia/grupos nem compositor otimizado por tiles; documentos grandes com efeitos podem recompor todas as camadas na CPU.
+
+**Atualização anterior:** a API C++ **v6** acrescenta **Alpha Lock** na camada e **seleção retangular** para restringir o pincel, respeitando as bordas mesmo ao atravessar tiles. O balde de tinta também respeita seleção e Alpha Lock. A seleção é temporária (não vai para o projeto); Alpha Lock é salvo e participa de undo/redo. O atalho **M** seleciona; **Ctrl+D** ou **Esc** limpa a seleção. O botão de bloqueio está na aba Camadas. **Limitação:** linha, retângulo e elipse ficam bloqueados enquanto houver seleção/Alpha Lock, até receberem a mesma proteção por pixel. A borracha com Alpha Lock ligado não apaga.
 
 **Etapa anterior:** a API C++ **v5** acrescenta um compositor de camadas nativo, com modos Normal, Multiply, Screen, Add e Overlay e composição RGBA baseada em alfa. Os modos podem ser alterados na aba Camadas e são preservados no projeto e no PNG exportado. A composição C++ é calculada sob demanda para documentos com modos diferentes de Normal; a visualização de camadas normais continua rápida pela GPU. **Limitação:** editar um documento grande com modos especiais força leitura e composição integrais das camadas visíveis; ainda faltam tiles de composição, máscaras e grupos.
 
@@ -113,7 +115,7 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 **Motor implementado inicialmente:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
 
-**Próxima prioridade:** máscara de camada, clipping, seleção elíptica e laço, restrições nas formas geométricas, composição nativa por tiles e pressão Windows Ink/WinTab. Pressão funciona no motor e em eventos de toque que a reportem; mouse comum permanece a 100%.
+**Próxima prioridade:** permitir pintar diretamente nas máscaras de camada, seleção elíptica e laço, grupos/clipping em cadeia, composição por tiles e pressão Windows Ink/WinTab. Pressão funciona no motor e em eventos de toque que a reportem; mouse comum permanece a 100%.
 
 ## Limitações atuais e próximos passos
 

@@ -32,11 +32,34 @@ local function cloneCanvas(original, w, h)
     return copy
 end
 
+local function cloneMask(mask)
+    if not mask then return nil end
+    local w,h=mask:getDimensions()
+    local copy=love.image.newImageData(w,h,"rgba8")
+    copy:paste(mask,0,0,0,0,w,h)
+    return copy
+end
+
+local function newMask(w,h,selection)
+    -- Red channel is mask coverage, alpha remains fully opaque.
+    local canvas=newCanvas(w,h)
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0,0,0,1)
+    if selection then
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.rectangle("fill",selection.x0,selection.y0,
+            selection.x1-selection.x0,selection.y1-selection.y0)
+    else love.graphics.clear(1,1,1,1) end
+    love.graphics.pop()
+    return canvas:newImageData()
+end
+
 local function layer(w, h, name)
     local canvas = newCanvas(w, h)
     Native.registerBlank(canvas)
     return {canvas = canvas, name = name, opacity = 1, visible = true,
-        blendMode=0, alphaLock=false}
+        blendMode=0, alphaLock=false, clipping=false, mask=nil}
 end
 
 local function cleanText(s)
@@ -51,6 +74,7 @@ local function createSnapshot(self)
             canvas = cloneCanvas(l.canvas, self.width, self.height),
             name = l.name, opacity = l.opacity, visible = l.visible,
             blendMode = l.blendMode or 0, alphaLock=l.alphaLock or false,
+            clipping=l.clipping or false, mask=cloneMask(l.mask),
         }
     end
     return snap
@@ -170,6 +194,44 @@ function Document:setLayerAlphaLock(index,enabled)
     return true
 end
 
+function Document:setClipping(index,enabled)
+    local layer=self.layers[index]
+    if not layer or index<=1 or not Native.available() then return false end
+    enabled=not not enabled
+    if layer.clipping==enabled then return false end
+    self:checkpoint()
+    layer.clipping=enabled
+    return true
+end
+
+function Document:createLayerMask(index)
+    local layer=self.layers[index]
+    if not layer or not Native.available() then return false end
+    self:checkpoint()
+    layer.mask=newMask(self.width,self.height,self.selection)
+    return true
+end
+
+function Document:invertLayerMask(index)
+    local layer=self.layers[index]
+    if not layer or not layer.mask then return false end
+    self:checkpoint()
+    -- Invert actual coverage. The mask is owned by the active layer,
+    -- and undo snapshots have an independent ImageData copy.
+    layer.mask:mapPixel(function(x,y,r,g,b,a)
+        return 1-r,1-g,1-b,a
+    end)
+    return true
+end
+
+function Document:removeLayerMask(index)
+    local layer=self.layers[index]
+    if not layer or not layer.mask then return false end
+    self:checkpoint()
+    layer.mask=nil
+    return true
+end
+
 function Document:setLayerBlend(index,mode)
     local layer=self.layers[index]
     if not layer or not checkMode(mode) then return false end
@@ -182,7 +244,10 @@ end
 
 function Document:hasBlendLayers()
     for _,layer in ipairs(self.layers) do
-        if layer.visible and (layer.blendMode or 0)~=0 then return true end
+        if layer.visible and ((layer.blendMode or 0)~=0 or
+            layer.mask~=nil or layer.clipping) then
+            return true
+        end
     end
     return false
 end
@@ -198,10 +263,22 @@ function Document:compositedCanvas()
     love.graphics.clear(1,1,1,1)
     love.graphics.pop()
     local pixels=white:newImageData()
-    for _,layer in ipairs(self.layers) do
+    for index,layer in ipairs(self.layers) do
         if layer.visible and layer.opacity>0 then
             local source=layer.canvas:newImageData()
-            Native.blendLayer(pixels,source,layer.opacity,layer.blendMode or 0)
+            local options={mask=layer.mask,clipping=layer.clipping}
+            if layer.clipping then
+                local base=self.layers[index-1]
+                -- Directly preceding visible layer is the clipping base.
+                -- A hidden/missing base makes the clipping layer invisible.
+                if base and base.visible then
+                    options.clip=base.canvas:newImageData()
+                    options.clipMask=base.mask
+                    options.clipOpacity=base.opacity
+                end
+            end
+            Native.blendLayer(pixels,source,layer.opacity,layer.blendMode or 0,
+                options)
         end
     end
     local image=love.graphics.newImage(pixels)
@@ -300,10 +377,15 @@ function Document:save(name)
     }
     for i, l in ipairs(self.layers) do
         assert(love.filesystem.write(root .. ("/layer-%02d.png"):format(i), pngBytes(l.canvas)))
+        if l.mask then
+            assert(love.filesystem.write(root .. ("/mask-%02d.png"):format(i),
+                l.mask:encode("png"):getString()))
+        end
         manifest[#manifest + 1] = table.concat({
             "layer", l.visible and "1" or "0",
             ("%.4f"):format(l.opacity), cleanText(l.name),
             tostring(l.blendMode or 0), l.alphaLock and "1" or "0",
+            l.clipping and "1" or "0", l.mask and "1" or "0",
         }, "\t")
     end
     assert(love.filesystem.write(root .. "/manifest.txt", table.concat(manifest, "\n") .. "\n"))
@@ -366,6 +448,16 @@ function Document.load(key)
             local mode=tonumber(fields[5]) or 0
             l.blendMode=checkMode(mode) and mode or 0 -- backwards compatible
             l.alphaLock=fields[6]=="1"
+            l.clipping=fields[7]=="1" and #result.layers>=1
+            if fields[8]=="1" then
+                local maskPath=root .. ("/mask-%02d.png"):format(#result.layers+1)
+                local mask=love.image.newImageData(maskPath)
+                if mask:getWidth()~=w or mask:getHeight()~=h or
+                    mask:getFormat()~="rgba8" then
+                    error("Mascara de camada invalida")
+                end
+                l.mask=mask
+            end
             table.insert(result.layers, l)
         end
     end

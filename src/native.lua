@@ -42,10 +42,28 @@ if ffiOK then
         int32_t alpha_lock, selection_enabled;
         int32_t left, top, right, bottom;
     } InkoraPaintClip;
+    typedef struct InkoraLayerEffects {
+        const uint8_t *mask_rgba;
+        uint64_t mask_bytes;
+        int32_t mask_stride;
+        int32_t clipping_enabled;
+        const uint8_t *clip_rgba;
+        uint64_t clip_bytes;
+        int32_t clip_stride;
+        float clip_opacity;
+        const uint8_t *clip_mask_rgba;
+        uint64_t clip_mask_bytes;
+        int32_t clip_mask_stride;
+    } InkoraLayerEffects;
     int32_t inkora_core_blend_layer(
         uint8_t* out_rgba, uint64_t out_bytes, int32_t out_stride,
         const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
         int32_t width, int32_t height, float opacity, int32_t blend_mode);
+    int32_t inkora_core_blend_layer_v7(
+        uint8_t* out_rgba, uint64_t out_bytes, int32_t out_stride,
+        const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
+        int32_t width, int32_t height, float opacity, int32_t blend_mode,
+        const InkoraLayerEffects *effects);
     int32_t inkora_core_api_version(void);
     int32_t inkora_core_stroke_v6(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
@@ -82,11 +100,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==6 then
+            if vok and version==7 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v6)"
+            Native.error="ABI C++ incompativel (requer v7)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -345,16 +363,49 @@ end
 
 -- Composes a straight-alpha RGBA layer onto output using the native engine.
 -- Both ImageData instances remain owned by Lua during the call.
-function Native.blendLayer(output,source,opacity,mode)
+local function imagePointer(image,w,h)
+    if not image then return nil end
+    assert(image:getWidth()==w and image:getHeight()==h,
+        "Dimensao de mascara ou camada-base invalida")
+    assert(image:getFormat()=="rgba8","Camada auxiliar exige RGBA8")
+    return ffi.cast("const uint8_t*",image:getFFIPointer())
+end
+
+-- options.mask, options.clip, options.clipMask are optional ImageData RGBA8.
+-- Mask coverage lives in the RED channel; clip uses the base layer ALPHA.
+-- Legacy calls without options retain precisely their old ABI behaviour.
+function Native.blendLayer(output,source,opacity,mode,options)
     assert(Native.available(),"Compositor C++ nao encontrado: "..tostring(Native.error))
     local w,h=output:getDimensions()
     assert(source:getWidth()==w and source:getHeight()==h,"Dimensao de camada invalida")
     assert(output:getFormat()=="rgba8" and source:getFormat()=="rgba8",
         "Compositor requer RGBA8")
-    local ok=Native.library.inkora_core_blend_layer(
-        ffi.cast("uint8_t*",output:getFFIPointer()),output:getSize(),w*4,
-        ffi.cast("const uint8_t*",source:getFFIPointer()),source:getSize(),w*4,
-        w,h,opacity,mode)
+    local dst=ffi.cast("uint8_t*",output:getFFIPointer())
+    local src=ffi.cast("const uint8_t*",source:getFFIPointer())
+    local ok
+    if options then
+        local mask,clip,clipMask=options.mask,options.clip,options.clipMask
+        local effects=ffi.new("InkoraLayerEffects[1]")
+        local e=effects[0]
+        e.mask_rgba=imagePointer(mask,w,h)
+        e.mask_bytes=mask and mask:getSize() or 0
+        e.mask_stride=mask and w*4 or 0
+        e.clipping_enabled=options.clipping and 1 or 0
+        e.clip_rgba=imagePointer(clip,w,h)
+        e.clip_bytes=clip and clip:getSize() or 0
+        e.clip_stride=clip and w*4 or 0
+        e.clip_opacity=options.clipOpacity or 0
+        e.clip_mask_rgba=imagePointer(clipMask,w,h)
+        e.clip_mask_bytes=clipMask and clipMask:getSize() or 0
+        e.clip_mask_stride=clipMask and w*4 or 0
+        ok=Native.library.inkora_core_blend_layer_v7(
+            dst,output:getSize(),w*4,src,source:getSize(),w*4,
+            w,h,opacity,mode,effects)
+    else
+        ok=Native.library.inkora_core_blend_layer(
+            dst,output:getSize(),w*4,src,source:getSize(),w*4,
+            w,h,opacity,mode)
+    end
     if ok~=1 then error("Compositor C++ recusou camada") end
     return output
 end

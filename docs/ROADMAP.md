@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v6 com Alpha Lock e seleção retangular sobre pincéis e tiles; CI em validação** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v6, modos de mesclagem, Alpha Lock e seleção retangular** |
+| Motor gráfico Inkora em C++ | **C++ ABI v7 com composição por máscaras RGBA e clipping pela camada-base; aguarda CI** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v7, blend, máscara de camada e clipping** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
@@ -35,7 +35,9 @@
 - [x] Compositor C++ v5 e cinco modos iniciais: Normal, Multiply, Screen, Add, Overlay; integrados à interface, undo, exportação PNG e manifesto.
 - [x] Alpha Lock por camada, preservado em undo/redo e no manifesto do projeto (retrocompatível).
 - [x] Seleção retangular temporária aplicada ao pincel/borracha e balde, inclusive nos limites de tiles.
-- [ ] Camadas: máscaras, clipping, grupos, composição por tiles e undo/redo eficiente.
+- [x] Máscara por camada criada da seleção; inversão, remoção, undo/redo, persistência em PNG.
+- [x] Clipping à transparência da camada imediatamente inferior, considerando máscara e opacidade, com compositor C++ v7.
+- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, composição por tiles e undo/redo eficiente.
 - [ ] Seleção com laço, varinha, elipse, feathering e suporte nas ferramentas de formas.
 - [ ] Selecao e transformacoes: laço, varinha, mover, redimensionar, rotacionar (retângulo básico já implementado).
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.

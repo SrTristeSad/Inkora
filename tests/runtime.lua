@@ -235,6 +235,78 @@ local function run()
         print("INKORA_SELECTION_ALPHA_LOCK_GPU_OK")
     end
 
+    if requireNative then
+        -- Real GPU <-> LuaJIT <-> C++ clipping and bitmap mask integration.
+        local effects=Doc.new(64,64,"Mask & clipping")
+        local bottom=effects.layers[1]
+        Brush.segment(bottom.canvas,18.5,30.5,18.5,30.5,
+            {0,0,1},34,1,false,Brush.beginStroke(bottom.canvas))
+        assert(effects:addLayer("Tinta vermelha"))
+        local upper=effects.layers[2]
+        Brush.segment(upper.canvas,32.5,30.5,32.5,30.5,
+            {1,0,0},60,1,false,Brush.beginStroke(upper.canvas))
+        assert(effects:setClipping(2,true),"Clipping nao foi ativado")
+        local left=effects:sampleColor(18,30)
+        local outside=effects:sampleColor(48,30)
+        assert(left[1]>0.90 and left[3]<0.10,
+            "Clipping deveria mostrar vermelho sobre base")
+        assert(outside[1]>0.95 and outside[2]>0.95 and outside[3]>0.95,
+            "Clipping vazou onde a base e transparente")
+
+        -- Mask built from selection, inverted, and undone/redone.
+        assert(effects:setSelection(16,20,22,40))
+        assert(effects:createLayerMask(2),"Falha ao criar mascara da selecao")
+        local restricted=effects:sampleColor(18,30)
+        local unmasked=effects:sampleColor(26,30)
+        assert(restricted[1]>0.9 and restricted[3]<0.10,
+            "Mascara excluiu pixel selecionado")
+        assert(unmasked[3]>0.9 and unmasked[1]<0.10,
+            "Mascara nao ocultou camada superior")
+
+        assert(effects:invertLayerMask(2),"Inversao de mascara falhou")
+        local reversed=effects:sampleColor(18,30)
+        assert(reversed[3]>0.9 and reversed[1]<0.10,
+            "Inversao nao ocultou pixel antes visivel")
+        assert(effects:undo(),"Undo da mascara invertida falhou")
+        local restored=effects:sampleColor(18,30)
+        assert(restored[1]>0.9 and restored[3]<0.10,
+            "Undo nao restaurou a mascara original")
+        assert(effects:redo(),"Redo da mascara invertida falhou")
+        local afterRedo=effects:sampleColor(18,30)
+        assert(afterRedo[3]>0.9 and afterRedo[1]<0.10,
+            "Redo nao recuperou a mascara invertida")
+
+        -- The lower layer's mask must also constrain clipping.
+        assert(effects:createLayerMask(1),"Mascara-base ausente")
+        local baseMask=effects.layers[1].mask
+        assert(baseMask:getFormat()=="rgba8")
+        effects:clearSelection()
+        assert(effects:invertLayerMask(1),"Nao foi possivel inverter mascara-base")
+        local noBase=effects:sampleColor(18,30)
+        assert(noBase[1]>0.95 and noBase[2]>0.95 and noBase[3]>0.95,
+            "Mascara da base nao limitou clipping corretamente")
+        assert(effects:undo(),"Undo da mascara-base falhou")
+
+        local path=effects:exportPNG()
+        assert(path and path:match("%.png$"),"Exportacao de mascara falhou")
+        effects:save("Mask & clipping")
+        local copy=Doc.load(effects.projectKey)
+        assert(copy.layers[2].clipping==true,"Clipping perdido no manifesto")
+        assert(copy.layers[2].mask~=nil and copy.layers[1].mask~=nil,
+            "Mascara perdida no projeto salvo")
+        local loadedColor=copy:sampleColor(18,30)
+        assert(loadedColor[3]>0.9 and loadedColor[1]<0.1,
+            "Mascara restaurada nao reproduziu a mesma imagem")
+        assert(copy:removeLayerMask(2),"Remover mascara falhou")
+        assert(copy.layers[2].mask==nil,"Remocao nao aplicou")
+        assert(copy:undo(),"Undo ao remover mascara falhou")
+        assert(copy.layers[2].mask~=nil,"Undo nao restaurou mascara")
+        assert(copy:setClipping(2,false),"Desativar clipping falhou")
+        assert(copy:undo(),"Undo do clipping falhou")
+        assert(copy.layers[2].clipping,"Undo nao restaurou clipping")
+        print("INKORA_MASK_CLIPPING_GPU_OK")
+    end
+
     -- Teste de atravessar 3 tiles: nao pode haver costura nas fronteiras.
     local wide=Doc.new(320,192,"Tile boundary")
     Native.resetStats()

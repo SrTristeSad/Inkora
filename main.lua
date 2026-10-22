@@ -259,7 +259,7 @@ function love.load()
         if not ok then app:statusMessage("Erro na ponta salva: "..tostring(err)) end
     end
     if Brush.nativeAvailable() then
-        app:statusMessage("Motor C++ v6 ativo | LuaJIT FFI | projeto Inkora")
+        app:statusMessage("Motor C++ v7 ativo | LuaJIT FFI | projeto Inkora")
     else
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end

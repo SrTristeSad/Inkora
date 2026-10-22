@@ -80,6 +80,34 @@ INKORA_API int32_t inkora_core_stroke_v6(
     const InkoraTip *tip, const InkoraMask *mask, float flow,
     float pressure_opacity, const InkoraPaintClip *clip);
 
+
+/* ABI v7 layer effects:
+   Masks are RGBA8, with RED channel as coverage (0 = hidden, 255 = shown).
+   Clipping uses the immediately preceding layer's source alpha, opacity,
+   and optional mask, NOT the accumulated opaque background.
+   All pointers are caller-owned for the duration of the call. */
+typedef struct InkoraLayerEffects {
+    const uint8_t *mask_rgba;
+    uint64_t mask_bytes;
+    int32_t mask_stride;
+
+    int32_t clipping_enabled;
+    const uint8_t *clip_rgba;
+    uint64_t clip_bytes;
+    int32_t clip_stride;
+    float clip_opacity;
+
+    const uint8_t *clip_mask_rgba;
+    uint64_t clip_mask_bytes;
+    int32_t clip_mask_stride;
+} InkoraLayerEffects;
+
+INKORA_API int32_t inkora_core_blend_layer_v7(
+    uint8_t *out_rgba, uint64_t out_bytes, int32_t out_stride,
+    const uint8_t *layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
+    int32_t width, int32_t height, float opacity, int32_t blend_mode,
+    const InkoraLayerEffects *effects);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

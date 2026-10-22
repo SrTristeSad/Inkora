@@ -339,7 +339,7 @@ function UI:drawLayersPanel(app,x,w,h)
     self:button(x+122,204,51,32,"Cima",function() doc:moveLayer(1) end)
     self:button(x+183,204,57,32,"Baixo",function() doc:moveLayer(-1) end)
     self:print("Toque em uma camada para editar",x,251,C.muted,self.small)
-    local rows=math.max(1,math.floor((h-540)/46))
+    local rows=math.max(1,math.floor((h-625)/46))
     local top=math.min(#doc.layers,math.max(rows,doc.selected+rows-1))
     for r=1,math.min(rows,#doc.layers) do
         local index=top-r+1
@@ -351,7 +351,9 @@ function UI:drawLayersPanel(app,x,w,h)
                 doc:toggleLayer(index)
             end,"ghost")
             self:print(layer.name,x+61,yy+7,index==doc.selected and C.accent or C.white,self.small)
-            self:print(tostring(math.floor(layer.opacity*100+0.5)).."%",x+61,yy+23,C.muted,self.small)
+            self:print(tostring(math.floor(layer.opacity*100+0.5)).."%"
+                ..(layer.mask and " M" or "")..(layer.clipping and " C" or ""),
+                x+61,yy+23,C.muted,self.small)
             self:register(x+57,yy,w-57,41,function()
                 doc.selected=index
             end)
@@ -359,6 +361,32 @@ function UI:drawLayersPanel(app,x,w,h)
     end
     local layer=doc.layers[doc.selected]
     if layer then
+        self:print("MASCARA DE CAMADA",x,h-375,C.muted,self.small)
+        self:button(x,h-352,78,31,layer.mask and "Recriar" or "Criar",function()
+            if doc:createLayerMask(doc.selected) then
+                app:statusMessage(doc.selection and
+                    "Mascara criada a partir da selecao" or
+                    "Mascara branca criada")
+            else app:statusMessage("Mascaras exigem o motor C++ v7") end
+        end,layer.mask and "primary" or nil)
+        self:button(x+84,h-352,72,31,"Inverter",function()
+            if not doc:invertLayerMask(doc.selected) then
+                app:statusMessage("Primeiro crie uma mascara")
+            end
+        end)
+        self:button(x+162,h-352,78,31,"Remover",function()
+            if not doc:removeLayerMask(doc.selected) then
+                app:statusMessage("Nenhuma mascara nesta camada")
+            end
+        end)
+        self:button(x,h-301,240,32,
+            layer.clipping and "Clipping: LIGADO" or "Clipping: DESLIGADO",
+            function()
+                if doc:setClipping(doc.selected,not layer.clipping) then
+                    app:statusMessage(not layer.clipping and
+                        "Clipping desligado" or "Clipping ligado")
+                else app:statusMessage("Clipping requer camada abaixo e C++ v7") end
+            end,layer.clipping and "primary" or nil)
         self:button(x,h-227,240,32,
             layer.alphaLock and "Alpha Lock: LIGADO" or "Alpha Lock: DESLIGADO",
             function()
