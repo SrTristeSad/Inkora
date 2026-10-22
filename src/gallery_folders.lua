@@ -94,6 +94,68 @@ function Folders:contents(projects,id)
     end
     return list
 end
+-- ibisPaint creates folders immediately with sequential default names.
+-- Naming is a later operation via the folder title / information panel.
+function Folders:defaultName(parent)
+    parent=parent or ""
+    local used={}
+    for _,folder in ipairs(self:children(parent)) do
+        used[folder.name]=true
+    end
+    local n=1
+    while used["Nova Pasta"..n] do n=n+1 end
+    return "Nova Pasta"..n
+end
+
+-- Count direct contents as My Gallery does in its title bar.
+function Folders:count(id,projects)
+    return #self:contents(projects,id)
+end
+
+-- A group cover uses an existing painting; search nested folders too.
+function Folders:cover(id,projects,visited)
+    visited=visited or {}
+    if visited[id] then return nil end
+    visited[id]=true
+    for _,project in ipairs(projects) do
+        if self:location(project.key)==id then return project end
+    end
+    for _,child in ipairs(self:children(id)) do
+        local found=self:cover(child.id,projects,visited)
+        if found then return found end
+    end
+end
+
+-- Create a group and move selected artworks in ONE index write so the
+-- folder cannot appear as an empty half-finished item on save failure.
+function Folders:groupProjects(keys,parent)
+    parent=parent or ""
+    assert(parent=="" or self.items[parent],"Pasta pai invalida")
+    local name=self:defaultName(parent)
+    local id
+    repeat
+        id="f"..tostring(os.time()).."-"..tostring(math.random(100000,999999))
+    until not self.items[id]
+    self.items[id]={id=id,parent=parent,name=name}
+    self.order[#self.order+1]=id
+    local before={}
+    for _,key in ipairs(keys or {}) do
+        assert(validKey(key),"Projeto invalido")
+        before[key]=self.projects[key] or ""
+        self.projects[key]=id
+    end
+    local ok,err=pcall(function()self:write()end)
+    if not ok then
+        for key,value in pairs(before) do
+            self.projects[key]=value~="" and value or nil
+        end
+        self.items[id]=nil
+        table.remove(self.order)
+        error(err)
+    end
+    return id
+end
+
 function Folders:create(name,parent)
     local clean=cleanName(name)
     assert(clean~="","Digite um nome para a pasta")
