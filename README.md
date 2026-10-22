@@ -17,6 +17,7 @@
 - **Miniaturas:** cada salvamento tenta gerar um preview PNG pequeno da composicao, sem substituir nem alterar os PNG de camadas. Trabalhos antigos sem miniatura continuam abrindo.
 - **Escopo:** a sequencia de entrada segue o comportamento observado e documentado do ibisPaint, mas nao se afirma paridade visual pixel a pixel; nome, simbolos, cores e identidade do Inkora sao proprios.
 
+\n### Importacao experimental de projetos ibisPaint (.ipv)\n\n- Arraste um arquivo **.ipv** para a janela da galeria, tela inicial ou editor. Inkora inspeciona registros e sentinelas e importa **somente a imagem composta PNG** mais recente como **novo projeto** no formato INKORA1. O arquivo .ipv original fica intacto; nao ha suporte a salvar .ipv, reconstruir camadas nativas, textos editaveis ou historico de pinceladas.\n- Leitura implementada de maneira independente em `src/ibis_ipv.lua` conforme a [documentacao tecnica de ipv-format](https://github.com/fapotaa/ipv-format/blob/main/docs/FORMAT.md) (pesquisa MIT; sem copiar seu codigo). Limites: entrada de ate 256 MiB, PNG de ate 64 MiB, canvas editavel ate 4096 x 4096. Formatos nao reconhecidos sao rejeitados.\n- **Status de validacao:** testes com contêiner .ipv sintetico e PNG real passaram no CI; arquivos reais do ibisPaint Windows 14.1.2 **nao foram testados**. Ver [auditoria de interoperabilidade](docs/IBISPAINT_INTEROPERABILITY.md).\n
 ## Executar no PC
 
 ### Windows sem instalar LÖVE
