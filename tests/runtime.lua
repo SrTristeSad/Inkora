@@ -503,6 +503,31 @@ local function run(app)
         app.brushAngle=0
         app.brushFollowPath=true
         print("INKORA_DIRECTIONAL_BRUSH_LUA_CPP_OK")
+        -- Tablet input is optional on Linux CI: inject pressure samples
+        -- into the same path used by Windows WinTab polling.
+        local Tablet=require("src.tablet")
+        local initialCurve=app.pressureCurve
+        local currentTime=love.timer.getTime()
+        Tablet._injectForTest(0.5,currentTime)
+        assert(math.abs(app:pressureFromTablet()-0.5)<0.01,
+            "Pressao de caneta nao entrou no caminho do mouse")
+        assert(math.abs(app.sampledPressure-0.5)<0.01)
+        UI.tab="settings"
+        love.draw()
+        assert(UI:click(px+65,706),"Botao de curva de pressao nao clicavel")
+        assert(app.pressureCurve=="Firme",
+            "Curva de pressao nao alterou a resposta")
+        local newCurve=love.filesystem.read("pen-pressure-curve.txt")
+        assert(newCurve=="Firme","Curva de pressao nao foi salva")
+        Tablet._injectForTest(0.5,love.timer.getTime())
+        assert(app:pressureFromTablet()<0.5,
+            "Curva firme nao diminuiu a sensibilidade")
+        Tablet._injectForTest(0,love.timer.getTime())
+        assert(app:pressureFromTablet()==1,
+            "Mouse sem pressão de caneta nao voltou ao padrao")
+        assert(app:setPressureCurve(initialCurve))
+        Tablet.shutdown()
+        print("INKORA_WINTAB_PRESSURE_INPUT_FALLBACK_OK")
         print("INKORA_LIVE_PREVIEW_SAVED_PRESET_OK")
 
         UI.tab="color"

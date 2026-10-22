@@ -2,6 +2,7 @@ local palette = require("src.palette")
 local Document = require("src.document")
 local Presets = require("src.presets")
 local BrushPreview = require("src.brush_preview")
+local Tablet = require("src.tablet")
 local UI = {}
 UI.__index = UI
 
@@ -596,6 +597,22 @@ function UI:drawSettings(app,x,w,h)
     self:button(x+10+(w-14)/2,657,(w-14)/2,31,"Restaurar",function()
         app:resetBrushProfile()
     end)
+    self:button(x+4,693,w-8,29,
+        "Curva de pressao: "..app.pressureCurve,function()
+        local index=1
+        for i,curve in ipairs(Tablet.curves) do
+            if curve==app.pressureCurve then index=i;break end
+        end
+        app:setPressureCurve(Tablet.curves[index%#Tablet.curves+1])
+    end,"ghost")
+    if h>=800 then
+        local raw=app.sampledPressure
+        local status=Tablet.status()
+        local label=raw and ("Pressao real: "..tostring(math.floor(raw*100+0.5)).."%")
+            or "Sem pressao ativa - mouse usa 100%"
+        self:print(label,x+5,731,C.white,self.small,w-10)
+        self:print(status,x+5,752,C.muted,self.small,w-10)
+    end
 end
 
 function UI:drawColorPanel(app,x,w,h)

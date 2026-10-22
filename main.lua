@@ -8,13 +8,15 @@ local Native = require("src.native")
 local Presets = require("src.presets")
 local Profiles = require("src.brush_profiles")
 local Viewport = require("src.viewport")
+local Tablet = require("src.tablet")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
     brushHardness=0.82, brushSpacing=0.18, brushTip=0,
     brushAngle=25, brushFollowPath=false,
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
-    presetId="ink", profiles={},
+    presetId="ink", profiles={}, pressureCurve="Linear",
+    sampledPressure=nil,
     fillTolerance=0.02, colorIndex=1, color=palette[1],
     zoom=1, offsetX=0, offsetY=0, rotation=0, dragging=nil,
     favorites={ink=true,pencil=true},
@@ -99,6 +101,31 @@ function app:resetBrushProfile()
     if self.ui then self.ui.tab="settings" end
     self:statusMessage("Pincel restaurado para o padrao")
     return true
+end
+
+function app:setPressureCurve(name)
+    local valid=false
+    for _,curve in ipairs(Tablet.curves) do
+        if name==curve then valid=true;break end
+    end
+    if not valid then return false end
+    if not love.filesystem.write("pen-pressure-curve.txt",name) then
+        self:statusMessage("Nao foi possivel salvar curva de pressao")
+        return false
+    end
+    self.pressureCurve=name
+    return true
+end
+
+function app:pressureFromTablet()
+    -- WinTab reports raw packets; SDL provides the matching cursor position.
+    -- A disconnected driver or an old sample never replaces the mouse.
+    local now=love.timer.getTime()
+    Tablet.poll(now)
+    local raw=Tablet.pressure(now)
+    self.sampledPressure=raw
+    if raw then return Tablet.applyCurve(raw,self.pressureCurve) end
+    return 1
 end
 
 function app:fitView()
@@ -385,6 +412,10 @@ function love.load()
     love.graphics.setBackgroundColor(0.15,0.19,0.25)
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
+    local savedCurve=love.filesystem.read("pen-pressure-curve.txt")
+    for _,curve in ipairs(Tablet.curves) do
+        if savedCurve==curve then app.pressureCurve=curve;break end
+    end
     app.profiles=Profiles.read()
     app:loadFavorites()
     app:choosePreset("ink")
@@ -395,7 +426,7 @@ function love.load()
         if not ok then app:statusMessage("Erro na ponta salva: "..tostring(err)) end
     end
     if Brush.nativeAvailable() then
-        app:statusMessage("Motor C++ v7 ativo | LuaJIT FFI | projeto Inkora")
+        app:statusMessage("Motor C++ v8 ativo | LuaJIT FFI | Inkora")
     else
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end
@@ -561,7 +592,8 @@ function love.mousepressed(x,y,button,istouch)
         (app.tool=="hand" or love.keyboard.isDown("space"))) then
         app.dragging={kind="pan"}
     elseif button==1 then
-        if app.tool=="brush" or app.tool=="eraser" then app:strokeStart(x,y)
+        if app.tool=="brush" or app.tool=="eraser" then
+            app:strokeStart(x,y,app:pressureFromTablet())
         elseif SHAPES[app.tool] then app:shapeStart(x,y)
         elseif app.tool=="fill" then app:fillAt(x,y)
         elseif app.tool=="picker" then app:sampleAt(x,y)
@@ -576,7 +608,8 @@ function love.mousemoved(x,y,dx,dy,istouch)
     if app.dragging.kind=="pan" then
         app.offsetX=app.offsetX+dx
         app.offsetY=app.offsetY+dy
-    elseif app.dragging.kind=="draw" then app:strokeMove(x,y)
+    elseif app.dragging.kind=="draw" then
+        app:strokeMove(x,y,app:pressureFromTablet())
     elseif app.dragging.kind=="shape" then app:shapeMove(x,y)
     elseif app.dragging.kind=="selection" then app:selectionMove(x,y) end
 end
@@ -586,7 +619,7 @@ function love.mousereleased(x,y,button,istouch)
     if button==1 then
         app.ui:mousereleased()
         if app.dragging and app.dragging.kind=="draw" then
-            app:strokeEnd(x,y)
+            app:strokeEnd(x,y,app:pressureFromTablet())
         elseif app.dragging and app.dragging.kind=="shape" then
             app:shapeEnd(x,y)
         elseif app.dragging and app.dragging.kind=="selection" then
@@ -728,7 +761,14 @@ function love.resize()
 end
 
 function love.update()
+    local now=love.timer.getTime()
+    Tablet.poll(now)
+    app.sampledPressure=Tablet.pressure(now)
     if app.doc then
         love.window.setTitle("Inkora | "..app.doc.name..(app.doc.dirty and " *" or ""))
     end
+end
+
+function love.quit()
+    Tablet.shutdown()
 end

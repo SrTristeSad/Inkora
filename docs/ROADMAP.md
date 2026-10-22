@@ -12,7 +12,8 @@
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
 | Motor gráfico Inkora em C++ | **C++ ABI v8: orientação de pontas chatas/PNG pela tangente da trajetória; validar CI** |
 | Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v8, estado direcional por segmento, blend, máscaras e clipping** |
-| Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
+| Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; build automático. Execução/mesa real Windows ainda sem validação** |
+| Entrada de caneta Windows | **Ponte WinTab experimental via LuaJIT FFI, sem interceptar SDL, com curvas de pressão e fallback; teste com driver físico pendente** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
 ## Ordem de execução
@@ -25,7 +26,9 @@
 - [x] Mover **um pincel real** do prototipo Lua para C++ com trajetoria, espessura, espacamento, alpha e testes visuais/regressao. Nao remover o caminho Lua antigo antes de passar testes.
 
 ### Fase 2 — Motor de pintura
-- [ ] Pincéis profissionais: interpolação avançada, textura contínua, tinta úmida, estabilização profissional completa e pressão Windows Ink/WinTab.
+- [ ] Pincéis profissionais: interpolação avançada, textura contínua, tinta úmida, estabilização profissional completa e suporte Windows Ink/WinTab comprovado.
+- [x] Ponte de leitura de pressão WinTab opcional por polling, sem substituir os eventos de posição SDL. Normalização conforme eixo do driver, curvas Leve/Linear/Firme, preferência persistida e fallback em caso de ausência de caneta.
+- [ ] Testar a ponte com modelos reais de mesa no Windows, incluindo pressionar/soltar, perda de foco, duplicidade de eventos, latência e inclinação.
 - [x] Primeiro estabilizador adaptativo à taxa de eventos e à velocidade do cursor (filtro de baixa passagem variável), com conclusão amostrada do traço e cursor/traço suavizado visível.
 - [x] C++ v8: orientação dinâmica da ponta chata e PNG ao seguir o traço, ângulo fixo configurável e estado preservado entre tiles/eventos.
 - [x] Salvar e restaurar ângulo e modo de direção em presets, mantendo leitura de configurações antigas.

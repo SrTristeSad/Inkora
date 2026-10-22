@@ -71,6 +71,26 @@ assert(math.abs(tail[#tail][1]-150)<1e-8 and
     math.abs(tail[#tail][2]-60)<1e-8,
     "Finalizacao nao alcançou ponteiro")
 print("INKORA_ADAPTIVE_STABILIZER_OK")
+-- WinTab math is platform-neutral; verify without a tablet or DLL.
+local Tablet=require("src.tablet")
+assert(Tablet.normalize(512,0,1024)==0.5)
+assert(Tablet.normalize(700,-100,1500)==0.5)
+assert(Tablet.normalize(-7,0,2048)==0)
+assert(Tablet.normalize(4096,0,2048)==1)
+assert(Tablet.normalize(1,1,1)==nil)
+assert(Tablet.normalize(0/0,0,100)==nil)
+assert(math.abs(Tablet.applyCurve(0.5,"Linear")-0.5)<0.0001)
+assert(Tablet.applyCurve(0.5,"Leve")>0.5)
+assert(Tablet.applyCurve(0.5,"Firme")<0.5)
+Tablet._injectForTest(0.45,12)
+assert(Tablet.pressure(12.08)==0.45)
+assert(Tablet.pressure(12.20)==nil)
+Tablet._injectForTest(0,20)
+assert(Tablet.pressure(20)==nil)
+Tablet.shutdown()
+print("INKORA_TABLET_PRESSURE_MATH_OK")
+
+
 
 local function fakeImage(lines)
     local h,w=#lines,#lines[1]
