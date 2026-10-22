@@ -95,7 +95,7 @@ function Startup:openCreate(app)
     self.canvasScroll=0
     self.error=nil
     self.newMenu=false
-    self.galleryModal={kind="new",focus=nil}
+    self.galleryModal={kind="new",focus=nil,quality=0.5}
     if app then app.screen="gallery" end
 end
 function Startup:drawBackground(w,h)
@@ -958,9 +958,24 @@ function Startup:drawNewDialog(app,w,h)
     end
     slider("width",py+199)
     slider("height",py+230)
-    self:label("Velocidade  ↔  Qualidade",px+36,py+254,
+    self:label("Velocidade  ↔  Qualidade",px+36,py+251,
         self.fonts.small,G.ink,panelW-72,"center")
-    local listY=py+278
+    local qualityLeft=px+64
+    local qualityRight=px+panelW-62
+    love.graphics.setColor(G.line)
+    love.graphics.setLineWidth(3)
+    love.graphics.line(qualityLeft,py+275,qualityRight,py+275)
+    love.graphics.setColor(G.white)
+    love.graphics.circle("fill",qualityLeft+
+        (qualityRight-qualityLeft)*(modal.quality or 0.5),py+275,7)
+    love.graphics.setLineWidth(1)
+    for i=1,10 do
+        local q=(i-0.5)/10
+        local qx=qualityLeft+(qualityRight-qualityLeft)*(i-1)/10
+        self:hit(qx,py+264,(qualityRight-qualityLeft)/10,23,
+            "new-quality-"..i,function()modal.quality=q end)
+    end
+    local listY=py+292
     local listH=math.max(58,ph-(listY-py)-12)
     local presetsH=#PRESETS*lineH+54
     self.canvasScroll=clamp(self.canvasScroll,0,math.max(0,presetsH-listH))
@@ -974,7 +989,11 @@ function Startup:drawNewDialog(app,w,h)
             love.graphics.rectangle("line",px+17,y+9,20,20)
             self:label(preset.name,px+49,y+12,self.fonts.body,G.ink,
                 panelW-182)
-            self:label(preset.w.." x "..preset.h,px+panelW-133,y+12,
+            local factor=0.60+0.80*(modal.quality or 0.5)
+            factor=math.min(factor,4096/preset.w,4096/preset.h)
+            local pw,phh=math.floor(preset.w*factor+0.5),
+                math.floor(preset.h*factor+0.5)
+            self:label(pw.." x "..phh,px+panelW-133,y+12,
                 self.fonts.small,G.ink,116,"right")
             -- A preset in ibisPaint immediately creates the canvas.
             -- Only register its visible hit rectangle; hidden rows cannot
@@ -983,7 +1002,12 @@ function Startup:drawNewDialog(app,w,h)
             local hh=math.min(y+lineH-2,listY+listH)-hy
             if hh>0 then
                 self:hit(px+7,hy,panelW-14,hh,"preset-"..i,function()
-                    self:choosePreset(i)
+                    local factor=0.60+0.80*(modal.quality or 0.5)
+                    factor=math.min(factor,4096/preset.w,4096/preset.h)
+                    self.draft.width=tostring(math.floor(preset.w*factor+0.5))
+                    self.draft.height=tostring(math.floor(preset.h*factor+0.5))
+                    self.draft.preset=i
+                    self.error=nil
                     if self:submit(app) then self.galleryModal=nil end
                 end)
             end
