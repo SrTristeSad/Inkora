@@ -1495,12 +1495,29 @@ local function run(app)
     assert(app.startup.galleryModal.kind=="new")
     clickStartup("new-quality-9")
     assert(app.startup.galleryModal.quality>0.8)
+    love.draw()
+    local sliderHit
+    for _,hit in ipairs(app.startup.hits) do
+        if hit.kind=="new-slider-width-5" then sliderHit=hit;break end
+    end
+    assert(sliderHit,"Slider continuo de largura nao localizado")
+    local sx=sliderHit.x+sliderHit.w/2
+    local sy=sliderHit.y+sliderHit.h/2
+    assert(app.startup:pointerPressed(sx,sy))
+    local before=tonumber(app.startup.draft.width)
+    app.startup:pointerMoved(sx+65,sy)
+    app.startup:pointerReleased(sx+65,sy)
+    assert(tonumber(app.startup.draft.width)>before and
+        not app.startup.newSliderDrag,
+        "Arrastar slider nao alterou a largura continuamente")
     clickStartup("new-focus-width")
-    app.startup.draft.width=""
     love.textinput("768")
+    assert(app.startup.draft.width=="768",
+        "Tocar largura deveria substituir o valor existente")
     clickStartup("new-focus-height")
-    app.startup.draft.height=""
     love.textinput("900")
+    assert(app.startup.draft.height=="900",
+        "Tocar altura deveria substituir o valor existente")
     clickStartup("create-artwork")
     assert(app.screen=="editor" and app.doc.width==768 and
         app.doc.height==900,"Campos L/A e OK nao definiram o canvas")
