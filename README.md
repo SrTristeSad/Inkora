@@ -155,7 +155,7 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 **Motor implementado inicialmente:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
 
-**Próxima prioridade:** medir latência e memória real em documentos 4096×4096, limitar o orçamento total do histórico, evoluir o balde de tinta para regiões e validar WinTab em hardware real. Também faltam seleção avançada, máscaras editáveis e otimização do compositor.
+**Correção de regressão do pincel:** ao editar uma camada compartilhada por histórico estrutural, a interface agora atualiza a referência ao Canvas depois do copy-on-write. Teste GPU reproduz o caminho real da interface, verifica o Canvas exibido e executa undo/redo. O runner gráfico Linux foi fixado no Ubuntu 24.04 para reduzir variação de dependências; a execução do teste completo ainda depende do resultado do CI.\n\n**Próxima prioridade:** medir latência e memória real em documentos 4096×4096, limitar o orçamento total do histórico, evoluir o balde de tinta para regiões e validar WinTab em hardware real. Também faltam seleção avançada, máscaras editáveis e otimização do compositor.
  
 **Observação sobre WinTab:** não houve novos testes físicos nesta atualização; a integração continua experimental.
 
