@@ -249,6 +249,7 @@ function UI:drawToolbar(app,w,h,right)
         {"Mover","hand","H"}, {"Balde","fill","G"},
         {"Amostra","picker","I"}, {"Linha","line","L"},
         {"Retangulo","rectangle","R"}, {"Elipse","ellipse","O"},
+        {"Selecao","select","M"},
     }
     for i,t in ipairs(tools) do
         local yy=103+(i-1)*56
@@ -358,6 +359,12 @@ function UI:drawLayersPanel(app,x,w,h)
     end
     local layer=doc.layers[doc.selected]
     if layer then
+        self:button(x,h-227,240,32,
+            layer.alphaLock and "Alpha Lock: LIGADO" or "Alpha Lock: DESLIGADO",
+            function()
+                doc:setLayerAlphaLock(doc.selected,not layer.alphaLock)
+                app:statusMessage(layer.alphaLock and "Alpha Lock ligado" or "Alpha Lock desligado")
+            end,layer.alphaLock and "primary" or nil)
         self:print("MODO DE MESCLAGEM",x,h-175,C.muted,self.small)
         local modes=doc.BLEND_MODES
         local index=(layer.blendMode or 0)+1

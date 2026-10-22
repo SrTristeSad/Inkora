@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v5 com compositor RGBA/alpha e modos de mesclagem; CI em validação** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v5 com compositor nativo e integração de pincel v4** |
+| Motor gráfico Inkora em C++ | **C++ ABI v6 com Alpha Lock e seleção retangular sobre pincéis e tiles; CI em validação** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v6, modos de mesclagem, Alpha Lock e seleção retangular** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
@@ -33,8 +33,11 @@
 - [x] Limite de tiles em cache por camada, com LRU e recarregamento seguro após expulsão.
 - [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes, incluindo blend modes que usam readbacks completos.
 - [x] Compositor C++ v5 e cinco modos iniciais: Normal, Multiply, Screen, Add, Overlay; integrados à interface, undo, exportação PNG e manifesto.
-- [ ] Camadas: máscaras, alpha lock, clipping, grupos, otimização por tiles de composição e undo/redo eficiente.
-- [ ] Selecao e transformacoes: laco, retangulo, varinha, mover, redimensionar, rotacionar.
+- [x] Alpha Lock por camada, preservado em undo/redo e no manifesto do projeto (retrocompatível).
+- [x] Seleção retangular temporária aplicada ao pincel/borracha e balde, inclusive nos limites de tiles.
+- [ ] Camadas: máscaras, clipping, grupos, composição por tiles e undo/redo eficiente.
+- [ ] Seleção com laço, varinha, elipse, feathering e suporte nas ferramentas de formas.
+- [ ] Selecao e transformacoes: laço, varinha, mover, redimensionar, rotacionar (retângulo básico já implementado).
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.
 - [ ] Entrada de mesa digitalizadora (Windows), latencia e benchmark de tela grande.
 

@@ -38,14 +38,19 @@ if ffiOK then
         int32_t width, height, stride;
         uint64_t buffer_bytes;
     } InkoraMask;
+    typedef struct InkoraPaintClip {
+        int32_t alpha_lock, selection_enabled;
+        int32_t left, top, right, bottom;
+    } InkoraPaintClip;
     int32_t inkora_core_blend_layer(
         uint8_t* out_rgba, uint64_t out_bytes, int32_t out_stride,
         const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
         int32_t width, int32_t height, float opacity, int32_t blend_mode);
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v4(const InkoraStroke *stroke,
+    int32_t inkora_core_stroke_v6(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
-        const InkoraMask *mask, float flow, float pressure_opacity);
+        const InkoraMask *mask, float flow, float pressure_opacity,
+        const InkoraPaintClip *clip);
     ]]
 end
 
@@ -77,11 +82,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==5 then
+            if vok and version==6 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v5)"
+            Native.error="ABI C++ incompativel (requer v6)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -233,12 +238,22 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
         mask[0].stride=custom.stride
         mask[0].buffer_bytes=custom.bytes
     end
+    local clip=ffi.new("InkoraPaintClip[1]")
+    clip[0].alpha_lock=session.settings.alphaLock and 1 or 0
+    local selection=session.settings.selection
+    if selection then
+        clip[0].selection_enabled=1
+        clip[0].left=selection.x0
+        clip[0].top=selection.y0
+        clip[0].right=selection.x1
+        clip[0].bottom=selection.y1
+    end
     local localState=ffi.new("InkoraStrokeState[1]")
     localState[0].distance_to_next=originalState.distance_to_next
     localState[0].initialized=originalState.initialized
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v4(stroke,localState,dirty,tip,mask,
-            session.settings.flow or 1,session.settings.pressureOpacity or 0)~=1 then
+    if Native.library.inkora_core_stroke_v6(stroke,localState,dirty,tip,mask,
+            session.settings.flow or 1,session.settings.pressureOpacity or 0,clip)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),

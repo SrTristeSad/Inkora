@@ -35,7 +35,8 @@ end
 local function layer(w, h, name)
     local canvas = newCanvas(w, h)
     Native.registerBlank(canvas)
-    return {canvas = canvas, name = name, opacity = 1, visible = true, blendMode=0}
+    return {canvas = canvas, name = name, opacity = 1, visible = true,
+        blendMode=0, alphaLock=false}
 end
 
 local function cleanText(s)
@@ -49,7 +50,7 @@ local function createSnapshot(self)
         snap.layers[i] = {
             canvas = cloneCanvas(l.canvas, self.width, self.height),
             name = l.name, opacity = l.opacity, visible = l.visible,
-            blendMode = l.blendMode or 0,
+            blendMode = l.blendMode or 0, alphaLock=l.alphaLock or false,
         }
     end
     return snap
@@ -61,7 +62,7 @@ function Document.new(w, h, name)
         width = w, height = h, name = name or "Sem titulo",
         selected = 1, layers = {layer(w, h, "Camada 1")},
         history = {}, future = {}, dirty = false, projectKey = nil,
-        compositeDirty=true, compositeCanvas=nil,
+        compositeDirty=true, compositeCanvas=nil, selection=nil,
     }, Document)
     return self
 end
@@ -139,6 +140,34 @@ function Document:setLayerOpacity(index, value, alreadyCheckpoint)
     if not alreadyCheckpoint then self:checkpoint() end
     l.opacity = value
     self:markCompositeDirty()
+end
+
+-- Selection is temporary canvas state, not stored in history or project.
+-- Document coordinates are zero-based, right/bottom edges exclusive.
+function Document:setSelection(x0,y0,x1,y1)
+    x0,y0,x1,y1=tonumber(x0),tonumber(y0),tonumber(x1),tonumber(y1)
+    if not x0 or not y0 or not x1 or not y1 then return false end
+    local left=math.max(0,math.min(self.width,math.floor(math.min(x0,x1))))
+    local top=math.max(0,math.min(self.height,math.floor(math.min(y0,y1))))
+    local right=math.max(0,math.min(self.width,math.floor(math.max(x0,x1))+1))
+    local bottom=math.max(0,math.min(self.height,math.floor(math.max(y0,y1))+1))
+    if left>=right or top>=bottom then return false end
+    self.selection={x0=left,y0=top,x1=right,y1=bottom}
+    return true
+end
+
+function Document:clearSelection()
+    self.selection=nil
+end
+
+function Document:setLayerAlphaLock(index,enabled)
+    local layer=self.layers[index]
+    if not layer then return false end
+    enabled=not not enabled
+    if (layer.alphaLock or false)==enabled then return false end
+    self:checkpoint()
+    layer.alphaLock=enabled
+    return true
 end
 
 function Document:setLayerBlend(index,mode)
@@ -274,7 +303,7 @@ function Document:save(name)
         manifest[#manifest + 1] = table.concat({
             "layer", l.visible and "1" or "0",
             ("%.4f"):format(l.opacity), cleanText(l.name),
-            tostring(l.blendMode or 0),
+            tostring(l.blendMode or 0), l.alphaLock and "1" or "0",
         }, "\t")
     end
     assert(love.filesystem.write(root .. "/manifest.txt", table.concat(manifest, "\n") .. "\n"))
@@ -336,6 +365,7 @@ function Document.load(key)
             l.opacity = math.max(0, math.min(1, tonumber(fields[3]) or 1))
             local mode=tonumber(fields[5]) or 0
             l.blendMode=checkMode(mode) and mode or 0 -- backwards compatible
+            l.alphaLock=fields[6]=="1"
             table.insert(result.layers, l)
         end
     end

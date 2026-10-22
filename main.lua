@@ -110,6 +110,14 @@ function app:strokeStart(x,y,pressure)
         self:statusMessage("Ative a visibilidade da camada antes de desenhar.")
         return
     end
+    if layer.alphaLock and self.tool=="eraser" then
+        self:statusMessage("Alpha Lock ativo: desative para usar a borracha.")
+        return
+    end
+    if (layer.alphaLock or self.doc.selection) and not Native.available() then
+        self:statusMessage("Selecao e Alpha Lock exigem o motor C++ v6.")
+        return
+    end
     self.doc:checkpoint()
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
@@ -117,6 +125,7 @@ function app:strokeStart(x,y,pressure)
         angle=self.brushTip==3 and 0 or 25,grain=0.85,seed=239,
         mask=self.brushTip==3 and self.tipMask or nil,
         flow=self.brushFlow,pressureOpacity=self.pressureOpacity,
+        alphaLock=layer.alphaLock,selection=self.doc.selection,
     })
     self.dragging={
         kind="draw",x=dx,y=dy,nativeStroke=nativeStroke,pressure=pressure or 1,
@@ -152,7 +161,33 @@ function app:strokeEnd(x,y,pressure)
     self.doc:markCompositeDirty()
 end
 
+function app:selectionStart(x,y)
+    local dx,dy=self:screenToDocument(x,y)
+    self.dragging={kind="selection",x1=dx,y1=dy,x2=dx,y2=dy}
+end
+
+function app:selectionMove(x,y)
+    local d=self.dragging
+    if d and d.kind=="selection" then d.x2,d.y2=self:screenToDocument(x,y) end
+end
+
+function app:selectionEnd(x,y)
+    local d=self.dragging
+    if not d or d.kind~="selection" then return end
+    d.x2,d.y2=self:screenToDocument(x,y)
+    if self.doc:setSelection(d.x1,d.y1,d.x2,d.y2) then
+        self:statusMessage("Selecao retangular ativa | Ctrl+D para limpar")
+    else
+        self:statusMessage("Selecao fora do documento.")
+    end
+end
+
 function app:shapeStart(x,y)
+    local layer=self.doc.layers[self.doc.selected]
+    if self.doc.selection or (layer and layer.alphaLock) then
+        self:statusMessage("Formas com selecao/Alpha Lock ainda nao suportadas; use o pincel.")
+        return
+    end
     local dx,dy=self:screenToDocument(x,y)
     if not insideDocument(self.doc,dx,dy) then return end
     if not self.doc.layers[self.doc.selected].visible then
@@ -189,7 +224,9 @@ function app:fillAt(x,y)
     end
     local success,err=pcall(function()
         local data=layer.canvas:newImageData()
-        if Fill.apply(data,dx,dy,self.color,self.fillTolerance) then
+        if Fill.apply(data,dx,dy,self.color,self.fillTolerance,{
+            selection=self.doc.selection,alphaLock=layer.alphaLock
+        }) then
             self.doc:replaceLayerData(selected,data)
             self:statusMessage("Regiao preenchida na camada "..selected)
         else self:statusMessage("Nenhuma alteracao na area selecionada") end
@@ -222,7 +259,7 @@ function love.load()
         if not ok then app:statusMessage("Erro na ponta salva: "..tostring(err)) end
     end
     if Brush.nativeAvailable() then
-        app:statusMessage("Motor C++ v1 ativo | LuaJIT FFI | projeto Inkora")
+        app:statusMessage("Motor C++ v6 ativo | LuaJIT FFI | projeto Inkora")
     else
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end
@@ -262,6 +299,26 @@ function love.draw()
             app.brushSize,app.brushOpacity)
         love.graphics.pop()
     end
+    local sel=app.doc.selection
+    if app.dragging and app.dragging.kind=="selection" then
+        local d=app.dragging
+        local left=math.min(d.x1,d.x2)
+        local top=math.min(d.y1,d.y2)
+        sel={x0=left,y0=top,x1=math.max(d.x1,d.x2),y1=math.max(d.y1,d.y2)}
+    end
+    if sel then
+        local sx=x+sel.x0*app.zoom
+        local sy=y+sel.y0*app.zoom
+        local sw=(sel.x1-sel.x0)*app.zoom
+        local sh=(sel.y1-sel.y0)*app.zoom
+        love.graphics.push("all")
+        love.graphics.setLineWidth(1)
+        love.graphics.setColor(0,0,0,0.9)
+        love.graphics.rectangle("line",sx-1,sy-1,sw+2,sh+2)
+        love.graphics.setColor(0.3,0.91,0.93,1)
+        love.graphics.rectangle("line",sx,sy,sw,sh)
+        love.graphics.pop()
+    end
     love.graphics.setScissor()
 
     if not app.ui.modal and app.tool~="hand" and app.tool~="fill"
@@ -288,7 +345,8 @@ function love.mousepressed(x,y,button,istouch)
         if app.tool=="brush" or app.tool=="eraser" then app:strokeStart(x,y)
         elseif SHAPES[app.tool] then app:shapeStart(x,y)
         elseif app.tool=="fill" then app:fillAt(x,y)
-        elseif app.tool=="picker" then app:sampleAt(x,y) end
+        elseif app.tool=="picker" then app:sampleAt(x,y)
+        elseif app.tool=="select" then app:selectionStart(x,y) end
     end
 end
 
@@ -300,7 +358,8 @@ function love.mousemoved(x,y,dx,dy,istouch)
         app.offsetX=app.offsetX+dx
         app.offsetY=app.offsetY+dy
     elseif app.dragging.kind=="draw" then app:strokeMove(x,y)
-    elseif app.dragging.kind=="shape" then app:shapeMove(x,y) end
+    elseif app.dragging.kind=="shape" then app:shapeMove(x,y)
+    elseif app.dragging.kind=="selection" then app:selectionMove(x,y) end
 end
 
 function love.mousereleased(x,y,button,istouch)
@@ -311,6 +370,8 @@ function love.mousereleased(x,y,button,istouch)
             app:strokeEnd(x,y)
         elseif app.dragging and app.dragging.kind=="shape" then
             app:shapeEnd(x,y)
+        elseif app.dragging and app.dragging.kind=="selection" then
+            app:selectionEnd(x,y)
         end
         app.dragging=nil
     elseif button==2 and app.dragging and app.dragging.kind=="pan" then
@@ -329,7 +390,8 @@ function love.touchpressed(id,x,y,dx,dy,pressure)
     elseif app.tool=="brush" or app.tool=="eraser" then app:strokeStart(x,y,pressure)
     elseif SHAPES[app.tool] then app:shapeStart(x,y)
     elseif app.tool=="fill" then app:fillAt(x,y)
-    elseif app.tool=="picker" then app:sampleAt(x,y) end
+    elseif app.tool=="picker" then app:sampleAt(x,y)
+    elseif app.tool=="select" then app:selectionStart(x,y) end
 end
 
 function love.touchmoved(id,x,y,dx,dy,pressure)
@@ -342,6 +404,8 @@ function love.touchmoved(id,x,y,dx,dy,pressure)
         app:strokeMove(x,y,pressure)
     elseif app.dragging and app.dragging.kind=="shape" then
         app:shapeMove(x,y)
+    elseif app.dragging and app.dragging.kind=="selection" then
+        app:selectionMove(x,y)
     end
 end
 
@@ -352,6 +416,8 @@ function love.touchreleased(id,x,y,dx,dy,pressure)
         app:strokeEnd(x,y,pressure)
     elseif app.dragging and app.dragging.kind=="shape" then
         app:shapeEnd(x,y)
+    elseif app.dragging and app.dragging.kind=="selection" then
+        app:selectionEnd(x,y)
     end
     app.dragging=nil
     app.activeTouch=nil
@@ -371,6 +437,9 @@ function love.keypressed(key,_,isrepeat)
     local shift=love.keyboard.isDown("lshift","rshift")
     if ctrl and key=="z" then app.doc:undo()
     elseif ctrl and key=="y" then app.doc:redo()
+    elseif ctrl and key=="d" then
+        app.doc:clearSelection()
+        app:statusMessage("Selecao removida.")
     elseif ctrl and key=="n" then app.ui:askNew(app)
     elseif ctrl and key=="o" then app.ui:askOpen(app)
     elseif ctrl and shift and key=="s" then app:exportPNG()
@@ -380,9 +449,12 @@ function love.keypressed(key,_,isrepeat)
     elseif not ctrl and not isrepeat then
         local shortcuts={
             b="brush", e="eraser", h="hand", g="fill",
-            i="picker", l="line", r="rectangle", o="ellipse"
+            i="picker", l="line", r="rectangle", o="ellipse",m="select"
         }
         if shortcuts[key] then app.tool=shortcuts[key]
+        elseif key=="escape" then
+            app.doc:clearSelection()
+            app:statusMessage("Selecao removida.")
         elseif key=="f" then app:fitView()
         elseif key=="[" then app.brushSize=math.max(1,app.brushSize-2)
         elseif key=="]" then app.brushSize=math.min(120,app.brushSize+2)

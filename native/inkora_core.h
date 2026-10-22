@@ -66,6 +66,20 @@ INKORA_API int32_t inkora_core_blend_layer(
     const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
     int32_t width, int32_t height, float opacity, int32_t blend_mode);
 
+// ABI v6: persistent layer alpha lock and transient rectangular selection.
+// Selection is in document pixel coordinates, [left,right) x [top,bottom).
+// Origin is obtained from InkoraTip.origin_x/y for tile-local strokes.
+// This does not impose a selection on legacy ABI functions.
+typedef struct InkoraPaintClip {
+    int32_t alpha_lock, selection_enabled;
+    int32_t left, top, right, bottom;
+} InkoraPaintClip;
+
+INKORA_API int32_t inkora_core_stroke_v6(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow,
+    float pressure_opacity, const InkoraPaintClip *clip);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

@@ -186,6 +186,55 @@ local function run()
         print("INKORA_NATIVE_LAYER_COMPOSITOR_OK")
     end
 
+    if requireNative then
+        -- End-to-end of rectangular selection and alpha-lock over a real Canvas.
+        local isolated=Doc.new(64,64,"Selection / Alpha Lock")
+        local layer=isolated.layers[1]
+        local start=Brush.beginStroke(layer.canvas,{tip=0})
+        Brush.segment(layer.canvas,32.5,32.5,32.5,32.5,
+            {1,0,0},38,1,false,start)
+        assert(isolated:setSelection(29,29,35,35))
+        assert(isolated:setLayerAlphaLock(1,true))
+        local locked=Brush.beginStroke(layer.canvas,{
+            tip=0,alphaLock=true,selection=isolated.selection
+        })
+        Brush.segment(layer.canvas,32.5,32.5,32.5,32.5,
+            {0,0,1},40,1,false,locked)
+        local pixels=layer.canvas:newImageData()
+        local r,g,b,a=pixels:getPixel(32,32)
+        assert(b>0.9 and r<0.1 and a>0.9,"Alpha Lock nao recoloriu centro")
+        local outR,outG,outB=pixels:getPixel(28,32)
+        assert(outR>0.9 and outB<0.1,"Pincel vazou da selecao")
+        local _,_,_,farAlpha=pixels:getPixel(55,32)
+        assert(farAlpha==0,"Pincel criou pixels fora da area pintada")
+        isolated:save("Selection / Alpha Lock")
+        local loaded=Doc.load(isolated.projectKey)
+        assert(loaded.layers[1].alphaLock,"Projeto perdeu Alpha Lock")
+        assert(loaded.selection==nil,"Selecao temporaria nao deve persistir")
+        assert(isolated:undo(),"Undo Alpha Lock falhou")
+        assert(not isolated.layers[1].alphaLock,"Undo nao reverteu Alpha Lock")
+        assert(isolated:redo(),"Redo Alpha Lock falhou")
+        assert(isolated.layers[1].alphaLock,"Redo nao restaurou Alpha Lock")
+
+        -- The fill tool respects both selection and existing pixel alpha.
+        local filled=love.image.newImageData(8,8,"rgba8")
+        for yy=1,6 do for xx=1,6 do
+            filled:setPixel(xx,yy,1,0,0,0.5)
+        end end
+        local selection={x0=3,y0=3,x1=5,y1=5}
+        assert(Fill.apply(filled,3,3,{0,1,0},0,
+            {selection=selection,alphaLock=true}))
+        local fr,fg,fb,fa=filled:getPixel(3,3)
+        assert(fg>0.99 and fr<0.01 and math.abs(fa-0.5)<0.01,
+            "Balde com Alpha Lock alterou transparencia")
+        local outsideRed,outsideGreen=filled:getPixel(2,3)
+        assert(outsideRed>0.99 and outsideGreen==0,
+            "Balde ignorou a selecao")
+        assert(not Fill.apply(filled,0,0,{0,0,1},0,{alphaLock=true}),
+            "Balde deveria ignorar area transparente travada")
+        print("INKORA_SELECTION_ALPHA_LOCK_GPU_OK")
+    end
+
     -- Teste de atravessar 3 tiles: nao pode haver costura nas fronteiras.
     local wide=Doc.new(320,192,"Tile boundary")
     Native.resetStats()
