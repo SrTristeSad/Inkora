@@ -763,7 +763,12 @@ function love.keypressed(key,_,isrepeat)
             b="brush", e="eraser", h="hand", g="fill",
             i="picker", l="line", r="rectangle", o="ellipse",m="select"
         }
-        if shortcuts[key] then app.tool=shortcuts[key]
+        if shortcuts[key] then
+            app.tool=shortcuts[key]
+            if app.tool=="fill" then app.ui.tab="settings"
+            elseif app.tool=="brush" or app.tool=="eraser" then
+                app.ui.tab="brush"
+            end
         elseif key=="escape" then
             app.doc:clearSelection()
             app:statusMessage("Selecao removida.")
