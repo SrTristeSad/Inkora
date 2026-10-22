@@ -1,0 +1,12 @@
+*.love
+*.exe
+*.dll
+*.zip
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+build/
+dist/
+exports/
+projects/

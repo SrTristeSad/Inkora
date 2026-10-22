@@ -1,0 +1,61 @@
+name: Inkora Desktop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lua-syntax:
+    name: Verify Lua source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+      - name: Parse all Lua files
+        run: find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
+      - name: Smoke test modules
+        run: lua5.1 tests/smoke.lua
+
+  windows-portable:
+    name: Build portable Windows application
+    needs: lua-syntax
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bundle LÖVE runtime and Inkora
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile 'love-windows.zip'
+          Expand-Archive -Path 'love-windows.zip' -DestinationPath 'love-runtime'
+          $runtime = Get-ChildItem 'love-runtime' -Directory | Select-Object -First 1
+          if (-not $runtime) { throw 'LÖVE runtime not found in archive' }
+          New-Item -ItemType Directory -Path 'dist/Inkora' -Force | Out-Null
+          Copy-Item -Path "$($runtime.FullName)/*" -Destination 'dist/Inkora' -Recurse -Force
+          Compress-Archive -Path 'main.lua','conf.lua','src' -DestinationPath 'dist/Inkora.love' -Force
+          $loveExe = [System.IO.File]::ReadAllBytes((Resolve-Path 'dist/Inkora/love.exe'))
+          $game = [System.IO.File]::ReadAllBytes((Resolve-Path 'dist/Inkora.love'))
+          $fused = [System.IO.File]::Create((Join-Path (Resolve-Path 'dist/Inkora') 'Inkora.exe'))
+          try {
+            $fused.Write($loveExe, 0, $loveExe.Length)
+            $fused.Write($game, 0, $game.Length)
+          } finally {
+            $fused.Dispose()
+          }
+          Remove-Item 'dist/Inkora/love.exe' -Force
+          if (Test-Path 'dist/Inkora/lovec.exe') { Remove-Item 'dist/Inkora/lovec.exe' -Force }
+          Compress-Archive -Path 'dist/Inkora/*' -DestinationPath 'dist/Inkora-Windows-portable.zip' -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Inkora-Windows-portable
+          path: dist/Inkora-Windows-portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Inkora-Love-source
+          path: dist/Inkora.love
