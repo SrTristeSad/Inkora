@@ -355,8 +355,9 @@ local function run(app)
         local fr,fg,fb=changed:getPixel(280,192)
         assert(fr==farR and fg==farG and fb==farB,
             "Compositor parcial modificou area distante")
-        local px,py,pb=mosaic:sampleColor(85,76)
-        assert(px and py and pb,"Amostra do compositor parcial falhou")
+        local sampled=mosaic:sampleColor(85,76)
+        assert(sampled and sampled[1] and sampled[2] and sampled[3],
+            "Amostra do compositor parcial falhou")
         local path=mosaic:exportPNG()
         assert(path and path:match("%.png$"),"Exportacao parcial falhou")
         -- A complete recomposition must produce byte-identical RGBA8 at
