@@ -6,6 +6,17 @@
 
 ## Executar no PC
 
+### Windows sem instalar LÖVE
+
+1. Abra a aba [Actions](https://github.com/SrTristeSad/Inkora/actions/workflows/windows.yml) do repositório.
+2. Entre na execução concluída mais recente do workflow **Inkora Desktop**.
+3. Em **Artifacts**, baixe **Inkora-Windows-portable**.
+4. Extraia o ZIP completo (incluindo as DLLs) e abra **Inkora.exe**.
+
+A compilação é automática no GitHub Actions. O pacote Windows portátil já contém o LÖVE; não precisa instalar um runtime separado. Artefatos do Actions podem expirar, mas um novo push no `main` gera um novo pacote.
+
+### Executar o código-fonte em LÖVE
+
 1. Instale o [LÖVE 11.5](https://love2d.org/) para Windows (versão 64 bits).
 2. Baixe o repositório (Code → Download ZIP) e extraia-o.
 3. Arraste a **pasta `Inkora`** para `love.exe`, ou use `love caminho/para/Inkora` com LÖVE no PATH.
