@@ -1,6 +1,7 @@
 local palette = require("src.palette")
 local Document = require("src.document")
 local Presets = require("src.presets")
+local BrushPreview = require("src.brush_preview")
 local UI = {}
 UI.__index = UI
 
@@ -26,7 +27,8 @@ local function clamp(v,a,b) return math.max(a,math.min(b,v)) end
 function UI.new()
     return setmetatable({
         hits={}, modal=nil, draggingSlider=nil, tab="brush",
-        layerScroll=0, favoriteOnly=false,
+        layerScroll=0, favoriteOnly=false, inspectorWidth=316,
+        brushCategory=1, draggingPanel=false,
         hue=0.55, saturation=0.75, brightness=0.9,
         font=love.graphics.newFont(14),
         small=love.graphics.newFont(12),
@@ -81,6 +83,8 @@ function UI:click(x,y)
             if hit.kind=="slider" then
                 self.draggingSlider=hit
                 if hit.onStart then hit.onStart() end
+            elseif hit.kind=="panel-resize" then
+                self.draggingPanel=true
             end
             if hit.action then hit.action(x,y) end
             return true
@@ -90,6 +94,18 @@ function UI:click(x,y)
 end
 
 function UI:mousemoved(x,y)
+    if self.draggingPanel then
+        local w=love.graphics.getWidth()
+        local maximum=math.max(316,math.min(490,w-620))
+        local oldWidth=self.inspectorWidth
+        local width=clamp(w-x,316,maximum)
+        self.inspectorWidth=width
+        if self.currentApp and oldWidth~=width then
+            -- Keep the document anchored to the centre of the workspace.
+            self.currentApp.offsetX=self.currentApp.offsetX+(oldWidth-width)/2
+        end
+        return true
+    end
     if self.draggingSlider then
         self.draggingSlider.action(x,y)
         return true
@@ -99,6 +115,7 @@ end
 
 function UI:mousereleased()
     self.draggingSlider=nil
+    self.draggingPanel=false
 end
 
 function UI:confirm(message,action)
@@ -232,7 +249,7 @@ end
 -- App-specific workspace sizing is shared with main.lua.
 function UI:workspaceBounds()
     local w,h=love.graphics.getDimensions()
-    return 88,73,w-332,h-44
+    return 88,73,w-self.inspectorWidth-16,h-44
 end
 
 local TOOLS={
@@ -411,44 +428,72 @@ function UI:drawStrokePreview(kind,x,y,width)
     end
 end
 
-function UI:drawBrushPanel(app,x,w,h)
-    self:print("BIBLIOTECA DE PINCEIS",x,155,C.white)
-    self:print("Escolha o traco antes de desenhar",x,180,C.muted,self.small,168)
-    self:button(x+w-105,173,105,27,
-        self.favoriteOnly and "Todos" or "Favoritos",function()
-            self.favoriteOnly=not self.favoriteOnly
-        end,self.favoriteOnly and "primary" or "ghost")
+local CATEGORIES={"Todos","Tinta","Esboco","Pintura","Textura","Precisao","Sua biblioteca"}
+
+function UI:visibleBrushes(app)
+    local category=CATEGORIES[self.brushCategory] or "Todos"
     local shown={}
     for _,preset in ipairs(Presets) do
-        if not self.favoriteOnly or app.favorites[preset.id] then
+        if (category=="Todos" or preset.family==category) and
+           (not self.favoriteOnly or app.favorites[preset.id]) then
             shown[#shown+1]=preset
         end
     end
+    return shown
+end
+
+function UI:drawBrushPanel(app,x,w,h)
+    self:print("BIBLIOTECA DE PINCEIS",x,155,C.white)
+    self:print("Previa renderizada pelo C++",x,181,C.muted,self.small)
+    self:button(x,205,29,30,"<",function()
+        self.brushCategory=(self.brushCategory-2)%#CATEGORIES+1
+    end,"ghost")
+    self:rect(x+34,205,w-155,30,C.surface,7)
+    self:print(CATEGORIES[self.brushCategory],x+39,213,C.white,
+        self.small,w-165,"center")
+    self:button(x+w-117,205,29,30,">",function()
+        self.brushCategory=self.brushCategory%#CATEGORIES+1
+    end,"ghost")
+    self:button(x+w-83,205,83,30,
+        self.favoriteOnly and "Todos" or "Favoritos",function()
+            self.favoriteOnly=not self.favoriteOnly
+        end,self.favoriteOnly and "primary" or "ghost")
+    local shown=self:visibleBrushes(app)
     local itemWidth=(w-9)/2
     if #shown==0 then
-        self:print("Nenhum favorito. Marque com * nos pinceis.",
-            x+12,254,C.muted,self.small,w-24)
+        self:print("Sem pinceis nesta categoria.",x+9,290,C.muted,self.small,w-18)
     end
     for i,preset in ipairs(shown) do
         local col=(i-1)%2
         local row=math.floor((i-1)/2)
         local px=x+col*(itemWidth+9)
-        local py=208+row*69
+        local py=245+row*63
         local active=app.presetId==preset.id
-        self:rect(px,py,itemWidth,62,active and C.surface2 or C.surface,10)
+        self:rect(px,py,itemWidth,58,active and C.surface2 or C.surface,10)
         if active then
             color(C.accent)
             love.graphics.setLineWidth(1.5)
-            love.graphics.rectangle("line",px+0.5,py+0.5,itemWidth-1,61,10)
+            love.graphics.rectangle("line",px+0.5,py+0.5,itemWidth-1,57,10)
             love.graphics.setLineWidth(1)
         end
-        self:drawStrokePreview(preset.preview,px+4,py+5,itemWidth-27)
-        self:print(preset.name,px+7,py+39,C.white,self.small,itemWidth-13)
-        self:register(px,py,itemWidth,62,function()
+        local preview=BrushPreview.get(preset,app.tipMask)
+        if preview then
+            local sw,sh=preview:getDimensions()
+            local pw=itemWidth-21
+            love.graphics.push("all")
+            love.graphics.setScissor(px+5,py+3,pw,33)
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(preview,px+5,py+1,0,pw/sw,34/sh)
+            love.graphics.pop()
+        else
+            self:drawStrokePreview(preset.preview,px+4,py+2,itemWidth-27)
+        end
+        self:print(preset.name,px+7,py+37,C.white,self.small,itemWidth-13)
+        self:register(px,py,itemWidth,58,function()
             if app:choosePreset(preset.id) then
                 app:statusMessage("Pincel: "..preset.name)
             else
-                app:statusMessage("Ponta PNG: Shift + arraste uma imagem para importar")
+                app:statusMessage("Ponta PNG: Shift + arraste uma imagem")
             end
         end)
         self:button(px+itemWidth-29,py+4,25,23,
@@ -456,15 +501,15 @@ function UI:drawBrushPanel(app,x,w,h)
                 app:toggleFavorite(preset.id)
             end,app.favorites[preset.id] and "primary" or "ghost")
     end
-    self:print("CONTROLE RAPIDO",x,489,C.muted,self.small)
-    self:slider(x+9,532,w-20,(app.brushSize-1)/119,"Tamanho",function(v)
+    self:print("CONTROLE RAPIDO",x,513,C.muted,self.small)
+    self:slider(x+9,550,w-20,(app.brushSize-1)/119,"Tamanho",function(v)
         app.brushSize=math.max(1,math.floor(1+v*119+0.5))
     end,tostring(app.brushSize).." px")
-    self:slider(x+9,583,w-20,app.brushOpacity,"Opacidade",function(v)
+    self:slider(x+9,601,w-20,app.brushOpacity,"Opacidade",function(v)
         app.brushOpacity=math.max(0.03,v)
     end,tostring(math.floor(app.brushOpacity*100+0.5)).."%")
-    self:print("CORES RECENTES",x,h-145,C.muted,self.small)
-    self:drawSwatches(app,x,h-120,w)
+    self:print("PALETA",x,h-139,C.muted,self.small)
+    self:drawSwatches(app,x,h-113,w)
 end
 
 function UI:drawSwatches(app,x,y,w)
@@ -755,25 +800,33 @@ end
 function UI:draw(app)
     self.hits={}
     local w,h=love.graphics.getDimensions()
-    local right=w-316
+    local maximum=math.max(316,math.min(490,w-620))
+    self.inspectorWidth=clamp(self.inspectorWidth,316,maximum)
+    local right=w-self.inspectorWidth
+    self.currentApp=app
     love.graphics.push("all")
     self:drawToolbar(app,w,h,right)
     local px=right+18
-    self:rect(px,78,280,43,C.top,10)
+    local panelWidth=self.inspectorWidth-36
+    self:rect(px,78,panelWidth,43,C.top,10)
     local tabs={{"Pinceis","brush"},{"Ajustes","settings"},
         {"Camadas","layers"},{"Cor","color"}}
     for i,t in ipairs(tabs) do
-        local xx=px+4+(i-1)*69
-        if self.tab==t[2] then self:rect(xx,82,67,35,C.surface2,8) end
+        local tw=(panelWidth-8)/4
+        local xx=px+4+(i-1)*tw
+        if self.tab==t[2] then self:rect(xx,82,tw,35,C.surface2,8) end
         self:print(t[1],xx+1,93,self.tab==t[2] and C.accent or C.muted,
-            self.small,65,"center")
-        self:register(xx,82,67,35,function() self.tab=t[2] end)
+            self.small,tw-2,"center")
+        self:register(xx,82,tw,35,function() self.tab=t[2] end)
     end
     self.currentDoc=app.doc
-    if self.tab=="brush" then self:drawBrushPanel(app,px,280,h)
-    elseif self.tab=="settings" then self:drawSettings(app,px,280,h)
-    elseif self.tab=="layers" then self:drawLayersPanel(app,px,280,h)
-    else self:drawColorPanel(app,px,280,h) end
+    if self.tab=="brush" then self:drawBrushPanel(app,px,panelWidth,h)
+    elseif self.tab=="settings" then self:drawSettings(app,px,panelWidth,h)
+    elseif self.tab=="layers" then self:drawLayersPanel(app,px,panelWidth,h)
+    else self:drawColorPanel(app,px,panelWidth,h) end
+    -- Splitter is intentionally above the panels in hit priority.
+    self:rect(right-2,64,4,h-100,C.divider)
+    self:register(right-7,64,14,h-100,function() end,"panel-resize")
     self:drawWorkspaceHeader(app)
 
     self:print(app.message or "Pronto para criar",18,h-25,C.white,
@@ -789,7 +842,7 @@ end
 
 function UI:mousewheel(x,y)
     local w=love.graphics.getWidth()
-    if self.tab~="layers" or x<w-316 then return false end
+    if self.tab~="layers" or x<w-self.inspectorWidth then return false end
     local count=#(self.currentDoc and self.currentDoc.layers or {})
     self.layerScroll=clamp(self.layerScroll-(y>0 and 1 or -1),0,math.max(0,count-1))
     return true

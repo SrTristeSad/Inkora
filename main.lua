@@ -173,6 +173,7 @@ function app:loadBrushMask(bytes,persist)
         assert(love.filesystem.write("brushes/custom-tip.png",bytes))
     end
     self.tipMask=mask
+    require("src.brush_preview").invalidate("custom")
     self.brushTip=3
     self.presetId="custom"
     self.tool="brush"

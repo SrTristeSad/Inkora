@@ -26,11 +26,14 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 3. Arraste a **pasta `Inkora`** para `love.exe`, ou use `love caminho/para/Inkora` com LÖVE no PATH.
 4. Uma janela do editor será aberta. Não é necessário Node.js nem instalação de pacotes Lua.
 
-### Interface de pintura — primeira reformulação perceptível
+### Interface de pintura — biblioteca nativa e painéis ajustáveis
 
 - Área de desenho destacada com mesa escura, tela centralizada, barra compacta de ferramentas e zoom rápido sobre o canvas.
 - Quatro abas funcionais no inspetor lateral: **Pincéis** (biblioteca visual com prévias), **Ajustes**, **Camadas** (miniaturas reais) e **Cor** (anel de matiz e quadrado de saturação/brilho).
 - Oito presets iniciais independentes: Nanquim, Lápis, Marcador, Aerógrafo, Giz, Pincel macio, Pixel e Ponta PNG. Cada preset altera parâmetros **reais** do motor de pintura C++, como ponta, fluxo, espaçamento, dureza, tamanho e opacidade.
+- **Prévia gerada pelo motor C++**: as miniaturas da biblioteca são rasterizadas de verdade, com a ponta e dinâmica de cada preset, uma única vez e guardadas em cache (não são desenhos artificiais feitos pela interface). O tamanho na miniatura é adaptado ao espaço visual.
+- **Categorias e favoritos combináveis:** navegue entre Todos, Tinta, Esboço, Pintura, Textura, Precisão e Sua biblioteca, mantendo o filtro de favoritos quando desejar.
+- **Painel lateral redimensionável:** arraste a borda esquerda do inspetor de pincéis/camadas/cores para ampliar o espaço de controles, preservando a posição do desenho no workspace.
 - **Favoritos persistentes:** marque com `*` no cartão do pincel e use o filtro **Favoritos**. As preferências ficam em `brush-favorites.txt` no diretório do Inkora, sem depender de servidor.
 - Canvas com estado inicial orientativo, cursor de pincel proporcional ao tamanho, controles rápidos para tamanho, opacidade, zoom e **rotação da visualização sem alterar os pixels**. Girar preserva a posição do cursor no documento, mesmo com zoom.
 - Painel de camadas com miniaturas atualizadas a partir dos próprios canvases, botões de ordenação, visibilidade, máscaras, clipping e modos de mesclagem.
@@ -121,7 +124,7 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Interface: objetivo perceptível da próxima versão
 
-**Correção de prioridade:** versões anteriores desenvolveram recursos técnicos sem transformarem suficientemente a experiência visual. Esta revisão altera a organização da área de trabalho, adiciona oito presets funcionais, favoritos persistentes, rotação ancorada do canvas (incluindo desenho/seleção sob giro) e introduz miniaturas reais de camadas e um seletor de cores HSV. **Ainda faltam** docking completo de painéis, UI otimizada para tela pequena, uma biblioteca profissional de pontas, comparativos visuais com o ibisPaint e testes de usabilidade com artistas. Não declarar equivalência visual ou funcional até validar esses itens.
+**Correção de prioridade:** versões anteriores desenvolveram recursos técnicos sem transformarem suficientemente a experiência visual. A interface agora possui oito presets com prévias produzidas pelo motor C++, categorias funcionais, favoritos persistentes, inspetor redimensionável, rotação ancorada do canvas, miniaturas de camadas e um seletor HSV. **Ainda faltam** docking completo de painéis, UI otimizada para tela pequena, uma biblioteca profissional de pontas, comparativos visuais com o ibisPaint e testes de usabilidade com artistas. Não declarar equivalência visual ou funcional até validar esses itens.
 
 ## Rumo ao motor Lua + C++
 

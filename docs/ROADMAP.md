@@ -46,9 +46,12 @@
 ### Fase 3 — Produto multiplataforma
 - [x] Primeira reformulação visual: biblioteca de oito presets funcionais, miniaturas em camadas, seletor HSV, área de pintura central e barra de ferramentas compacta.
 - [x] Favoritos persistentes na biblioteca e filtro funcional de pincéis.
+- [x] Miniaturas de pincéis renderizadas com o motor C++ e cache por preset.
+- [x] Biblioteca filtrável por categorias de pincéis, combinável com favoritos.
+- [x] Inspetor lateral de largura ajustável por arraste, preservando o enquadramento do documento.
 - [x] Rotação visual do canvas com mouse/pincel/seleção alinhados e zoom ancorado; sem alterar a orientação dos pixels exportados.
 - [ ] Testar usabilidade da rotação com canetas digitais e gestos multitouch reais em Windows.
-- [ ] Evoluir o desktop para nível profissional: painéis móveis, favoritos de pincéis, prévia da ponta importada, opções de caneta digitalizadora, atalhos personalizáveis e UX validada com artistas.
+- [ ] Evoluir o desktop para nível profissional: dock de painéis, paleta flutuante, preview ao vivo quando o usuário muda parâmetros, opções de caneta digitalizadora, atalhos personalizáveis e UX validada com artistas.
 - [ ] Formatos interoperáveis e documentos complexos.
 - [ ] Reutilizar o mesmo nucleo C++/Lua em Android, com suporte a toque/gestos/caneta.
 - [ ] Comparacao sistematica da experiencia com referencias, sem copiar marca, arte ou codigo proprietario.
