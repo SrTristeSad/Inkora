@@ -148,4 +148,38 @@ assert(#presets==9 and presets.find("ink").tip==0 and
     presets.find("marker").tip==1 and presets.find("watercolor").wetness>0.7)
 print("INKORA_VIEWPORT_PRESETS_OK")
 
+-- Persisted folder membership is separate from layer/project pixels.
+local oldLove=love
+local memoryFiles={}
+love={filesystem={
+    read=function(path)return memoryFiles[path]end,
+    write=function(path,bytes)memoryFiles[path]=bytes;return true end,
+}}
+local FolderStore=require("src.gallery_folders")
+local folders=FolderStore.new()
+assert(#folders:children("")==0)
+local parent=folders:create("Personagens")
+local sub=folders:create("Rascunhos",parent)
+assert(parent~=sub)
+assert(folders:parent(sub)==parent)
+folders:moveProjects({"art01","art02"},sub)
+assert(folders:location("art01")==sub and folders:location("art02")==sub)
+local restored=FolderStore.new()
+assert(restored:location("art01")==sub and restored:name(parent)=="Personagens")
+assert(#restored:contents({{key="art01",name="A"},{key="art02",name="B"}},"")==1,
+    "Pastas da raiz nao apareceram")
+assert(#restored:contents({{key="art01",name="A"},{key="art02",name="B"}},sub)==2)
+local good,err=pcall(function()restored:moveFolder(parent,sub)end)
+assert(not good and tostring(err):find("dentro"),
+    "Mover grupo para dentro de si mesmo precisa ser bloqueado")
+restored:rename(parent,"Personagens 100%")
+assert(FolderStore.new():name(parent)=="Personagens 100%",
+    "Nomes com percentual quebraram a persistencia")
+restored:moveProjects({"art01","art02"},"")
+assert(restored:location("art02")=="")
+restored:deleteEmpty(sub)
+restored:deleteEmpty(parent)
+assert(#FolderStore.new():children("")==0)
+love=oldLove
+print("INKORA_GALLERY_NESTED_FOLDERS_STORAGE_OK")
 print("Inkora: tests de modulos OK")
