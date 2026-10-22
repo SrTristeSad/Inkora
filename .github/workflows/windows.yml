@@ -21,6 +21,25 @@ jobs:
         run: find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
       - name: Smoke test modules
         run: lua5.1 tests/smoke.lua
+      - name: Test real public ibisPaint IPV fixture (Android, read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # External fixture stays outside git: MIT research template,
+          # not a claim of Windows ibisPaint interoperability.
+          url="https://raw.githubusercontent.com/fapotaa/ipv-format/a5bded915994dbbf972b549eafe02c6a64c94731/templates/general-30-text-layers.ipv"
+          curl -fLsS --retry 3 "$url" -o /tmp/inkora-public-reference.ipv
+          expected="d3dc6f83d90f59a3b145967a18d6c6aaabf8356a"
+          actual="$(git hash-object /tmp/inkora-public-reference.ipv)"
+          test "$actual" = "$expected"
+          lua5.1 tests/ipv_real_fixture.lua /tmp/inkora-public-reference.ipv
+          lua5.1 tools/inspect_ipv.lua /tmp/inkora-public-reference.ipv > ipv-audit.txt
+          cat ipv-audit.txt
+      - name: Upload IPV metadata report (no third-party binary)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Inkora-IPV-Audit
+          path: ipv-audit.txt
       - name: Compile native C++ engine
         run: |
           cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
