@@ -182,4 +182,42 @@ restored:deleteEmpty(parent)
 assert(#FolderStore.new():children("")==0)
 love=oldLove
 print("INKORA_GALLERY_NESTED_FOLDERS_STORAGE_OK")
+-- Reverse-engineered IPV container smoke tests: independently constructed
+-- records. No test images or source files from third-party apps are copied.
+local ipv=require("src.ibis_ipv")
+local function U16(v)
+    return string.char(math.floor(v/256)%256,v%256)
+end
+local function U32(v)
+    return string.char(math.floor(v/16777216)%256,
+        math.floor(v/65536)%256,math.floor(v/256)%256,v%256)
+end
+local function rec(t,sub,bytes)
+    return U16(t)..U16(sub)..U32(#bytes)..bytes..
+        U32((4294967296-(#bytes+8))%4294967296)
+end
+local fakePNG=string.char(137).."PNG\\r\\n"..string.char(26).."\\n"..
+    U32(13).."IHDR"..U32(64)..U32(64)..string.rep("\\0",5)
+local header=rec(0x0100,0x0100,string.rep("\\0",8)..U32(64)..U32(64))
+local composite=rec(0x0100,0x0500,
+    string.rep("\\0",8)..U32(0xffffffff)..U32(0)..U16(0)..
+    U32(#fakePNG)..fakePNG)
+local layer=rec(0x0100,0x0500,
+    string.rep("\\0",8)..U32(1)..U32(1)..U16(0)..
+    U32(0))
+local goodIPV=header..composite..layer
+local info=ipv.inspect(goodIPV)
+assert(info.width==64 and info.height==64 and info.png==fakePNG and
+    info.snapshots==1 and info.records==3 and info.flattened)
+local function shouldFail(bytes,message)
+    local ok,err=pcall(ipv.inspect,bytes)
+    assert(not ok and tostring(err):find(message,1,true),
+        "IPV corrupto foi aceito ou deu erro errado: "..tostring(err))
+end
+shouldFail(header..layer,"sem snapshot PNG composto")
+shouldFail(goodIPV:sub(1,-2),"payload truncado")
+shouldFail(header..composite:sub(1,-5)..U32(123),"sentinela invalida")
+local sizeMismatch=rec(0x0100,0x0100,string.rep("\\0",8)..U32(64)..U32(65))
+shouldFail(sizeMismatch..composite,"divergem")
+print("INKORA_IPV_CONTAINER_READONLY_INSPECTOR_OK")
 print("Inkora: tests de modulos OK")
