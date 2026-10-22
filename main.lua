@@ -880,7 +880,9 @@ end
 
 function love.textinput(text)
     if app.screen~="editor" then
-        if app.screen=="create" then app.startup:textinput(text) end
+        if app.screen=="create" or app.screen=="gallery" then
+            app.startup:textinput(text)
+        end
     else app.ui:textinput(text) end
 end
 
