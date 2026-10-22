@@ -390,6 +390,82 @@ local function run(app)
         mosaic:compositedCanvas()
         assert(mosaic:compositorStats().fullBuilds==4,
             "Undo deve invalidar toda a imagem composta")
+        -- The first/structural composition is now streamed into bounded
+        -- 512x512 C++ batches instead of reading every full-size layer.
+        local large=Doc.new(768,640,"Composicao inicial regional")
+        local base=large.layers[1].canvas
+        local paint0=Brush.beginStroke(base)
+        Brush.segment(base,428.5,321.5,611.5,321.5,
+            {0.97,0.13,0.18},88,1,false,paint0)
+        assert(large:addLayer("Screen / clipped"))
+        local upper=large.layers[2].canvas
+        local paint1=Brush.beginStroke(upper)
+        Brush.segment(upper,450.5,321.5,601.5,321.5,
+            {0.04,0.12,0.95},72,1,false,paint1)
+        assert(large:setLayerBlend(2,2))
+        assert(large:setClipping(2,true))
+        assert(large:setSelection(477,260,590,395))
+        assert(large:createLayerMask(2))
+        large:clearSelection()
+        local tiledCanvas=large:compositedCanvas()
+        local tileStats=large:compositorStats()
+        assert(tileStats.fullBuilds==1 and tileStats.lastBatches==4,
+            "Composicao inicial deveria usar quatro blocos de 512px")
+        assert(tileStats.peakRegionPixels<=512*512 and
+            tileStats.buildTileSize==512,
+            "Buffer temporario excedeu limite declarado")
+        assert(tileStats.lastPixels==768*640 and tileStats.lastTiles==30,
+            "Metricas iniciais de composicao divergentes")
+        local tiled=tiledCanvas:newImageData()
+        -- Independent reference: original non-tiled full-frame C++ routine.
+        -- This is only used by the test, never the production compositor.
+        local whole=love.graphics.newCanvas(768,640,{format="rgba8"})
+        love.graphics.push("all")
+        love.graphics.setCanvas(whole)
+        love.graphics.clear(1,1,1,1)
+        love.graphics.pop()
+        local reference=whole:newImageData()
+        for index,layer in ipairs(large.layers) do
+            if layer.visible and layer.opacity>0 then
+                local opt={mask=layer.mask,clipping=layer.clipping}
+                if layer.clipping then
+                    local previous=large.layers[index-1]
+                    if previous and previous.visible then
+                        opt.clip=previous.canvas:newImageData()
+                        opt.clipMask=previous.mask
+                        opt.clipOpacity=previous.opacity
+                    end
+                end
+                Native.blendLayer(reference,layer.canvas:newImageData(),
+                    layer.opacity,layer.blendMode or 0,opt)
+            end
+        end
+        for y=0,639,23 do
+            for x=0,767,19 do
+                local a,b,c,d=tiled:getPixel(x,y)
+                local e,f,g,h=reference:getPixel(x,y)
+                assert(math.abs(a-e)<0.005 and math.abs(b-f)<0.005
+                    and math.abs(c-g)<0.005 and math.abs(d-h)<0.005,
+                    ("Inicial em blocos divergiu do compositor inteiro: %d,%d")
+                        :format(x,y))
+            end
+        end
+        for x=507,518 do
+            for y=311,333,2 do
+                local a,b,c,d=tiled:getPixel(x,y)
+                local e,f,g,h=reference:getPixel(x,y)
+                assert(math.abs(a-e)<0.005 and math.abs(b-f)<0.005
+                    and math.abs(c-g)<0.005 and math.abs(d-h)<0.005,
+                    ("Emenda na borda 512: %d,%d"):format(x,y))
+            end
+        end
+        assert(large:setLayerBlend(2,4))
+        local updatedWhole=large:compositedCanvas()
+        assert(updatedWhole==tiledCanvas and
+            large:compositorStats().fullBuilds==2 and
+            large:compositorStats().lastBatches==4,
+            "Mudanca estrutural nao regenerou tiles sem buffer completo")
+        print("INKORA_BOUNDED_INITIAL_COMPOSITOR_GPU_OK")
         print("INKORA_PARTIAL_COMPOSITOR_MASK_CLIP_GPU_OK")
     end
 

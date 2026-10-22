@@ -50,7 +50,7 @@
 - [x] Três pontas nativas iniciais (redonda, chata, granulada procedural), com API C++ v3 e testes.
 - [x] Cache de tiles 128×128 com leituras regionais sob demanda, inicialização transparente e invalidação em operações Lua.
 - [x] Limite de tiles em cache por camada, com LRU e recarregamento seguro após expulsão.
-- [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes. A primeira composição e mudanças estruturais com blend ainda usam readbacks completos; pinceladas já fazem atualizações regionais.
+- [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes. A primeira composição e mudanças estruturais agora usam lotes até 512×512 (ainda percorrem todas as camadas); pinceladas atualizam regiões de 128×128. Faltam benchmarks reais de latência/memória.
 - [x] Compositor C++ v5 e cinco modos iniciais: Normal, Multiply, Screen, Add, Overlay; integrados à interface, undo, exportação PNG e manifesto.
 - [x] Alpha Lock por camada, preservado em undo/redo e no manifesto do projeto (retrocompatível).
 - [x] Seleção retangular temporária aplicada ao pincel/borracha e balde, inclusive nos limites de tiles.
@@ -58,7 +58,9 @@
 - [x] Clipping à transparência da camada imediatamente inferior, considerando máscara e opacidade, com compositor C++ v7.
 - [x] Recomposição incremental por tiles de 128×128 após pinceladas, usando as dirty regions do núcleo e o mesmo compositor nativo com blend/máscara/clipping.
 - [x] Métricas de tiles/pixels recompostos expostas no painel de Camadas e verificadas com teste de regressão GPU comparando pixels com a composição integral.
-- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, composição inicial em tiles sem leitura integral e undo/redo eficiente.
+- [x] Composição inicial e mudanças estruturais processadas em lotes limitados a 512×512, sem buffers temporários por camada de 4096×4096.
+- [x] Teste de comparação contra a implementação C++ integral anterior em 768×640 com máscara, clipping, Screen e borda 512.
+- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, redução de cópias do histórico e renderização incremental progressiva.
 - [ ] Seleção com laço, varinha, elipse, feathering e suporte nas ferramentas de formas.
 - [ ] Selecao e transformacoes: laço, varinha, mover, redimensionar, rotacionar (retângulo básico já implementado).
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.

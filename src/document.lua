@@ -5,6 +5,7 @@ Document.__index = Document
 local MAX_LAYERS = 16
 local MAX_HISTORY = 10
 local COMPOSITE_TILE = 128
+local COMPOSITE_BUILD_TILE = 512
 local BLEND_MODES={"Normal","Multiply","Screen","Add","Overlay"}
 
 Document.BLEND_MODES=BLEND_MODES
@@ -90,7 +91,8 @@ function Document.new(w, h, name)
         compositeDirty=true, compositeCanvas=nil, selection=nil,
         compositeInvalidFull=true, compositeDirtyTiles={},
         compositeMetrics={fullBuilds=0,partialBuilds=0,lastTiles=0,
-            lastPixels=0,totalPixels=0},
+            lastPixels=0,totalPixels=0,lastBatches=0,
+            peakRegionPixels=0,regionReads=0},
     }, Document)
     return self
 end
@@ -337,77 +339,84 @@ function Document:compositedCanvas()
         return self.compositeCanvas
     end
     local metrics=self.compositeMetrics
-    if self.compositeInvalidFull or not self.compositeCanvas then
-        -- Retain the exact historical full-pass result as a reference.
-        local white=newCanvas(self.width,self.height)
-        love.graphics.push("all")
-        love.graphics.setCanvas(white)
-        love.graphics.clear(1,1,1,1)
-        love.graphics.pop()
-        local pixels=white:newImageData()
-        for index,layer in ipairs(self.layers) do
-            if layer.visible and layer.opacity>0 then
-                local source=layer.canvas:newImageData()
-                local options={mask=layer.mask,clipping=layer.clipping}
-                if layer.clipping then
-                    local preceding=self.layers[index-1]
-                    if preceding and preceding.visible then
-                        options.clip=preceding.canvas:newImageData()
-                        options.clipMask=preceding.mask
-                        options.clipOpacity=preceding.opacity
-                    end
-                end
-                Native.blendLayer(pixels,source,layer.opacity,
-                    layer.blendMode or 0,options)
+    local full=self.compositeInvalidFull or not self.compositeCanvas
+    local canvas=self.compositeCanvas or newCanvas(self.width,self.height)
+    -- The full pass is streamed in 512x512 chunks, rather than reading
+    -- 4096x4096 RGBA from every visible source layer in one allocation.
+    -- Brush updates retain finer 128x128 regions for better responsiveness.
+    local buildSize=full and COMPOSITE_BUILD_TILE or COMPOSITE_TILE
+    local regions={}
+    if full then
+        for y=0,self.height-1,buildSize do
+            for x=0,self.width-1,buildSize do
+                regions[#regions+1]={
+                    x=x,y=y,
+                    width=math.min(buildSize,self.width-x),
+                    height=math.min(buildSize,self.height-y)
+                }
             end
         end
-        local image=love.graphics.newImage(pixels)
-        local canvas=self.compositeCanvas or newCanvas(self.width,self.height)
+    else
+        for _,region in pairs(self.compositeDirtyTiles) do
+            regions[#regions+1]=region
+        end
+    end
+    local count,pixels,peak=0,0,0
+    for _,region in ipairs(regions) do
+        -- Source GPU readbacks must happen with no destination canvas bound.
+        local sub=composeTile(self,region)
+        local image=love.graphics.newImage(sub)
         love.graphics.push("all")
         love.graphics.setCanvas(canvas)
         love.graphics.setBlendMode("replace","premultiplied")
         love.graphics.setColor(1,1,1,1)
-        love.graphics.draw(image)
+        love.graphics.draw(image,region.x,region.y)
         love.graphics.pop()
-        self.compositeCanvas=canvas
-        self.compositeInvalidFull=false
-        self.compositeDirtyTiles={}
-        metrics.fullBuilds=metrics.fullBuilds+1
-        metrics.lastTiles=math.ceil(self.width/COMPOSITE_TILE)*
-                          math.ceil(self.height/COMPOSITE_TILE)
-        metrics.lastPixels=self.width*self.height
-    else
-        local regions=self.compositeDirtyTiles
-        local count,pixels=0,0
-        -- Readbacks happen outside the target canvas render scope.
-        for _,region in pairs(regions) do
-            local sub=composeTile(self,region)
-            local image=love.graphics.newImage(sub)
-            love.graphics.push("all")
-            love.graphics.setCanvas(self.compositeCanvas)
-            love.graphics.setBlendMode("replace","premultiplied")
-            love.graphics.setColor(1,1,1,1)
-            love.graphics.draw(image,region.x,region.y)
-            love.graphics.pop()
-            count=count+1
-            pixels=pixels+region.width*region.height
-        end
-        self.compositeDirtyTiles={}
-        metrics.partialBuilds=metrics.partialBuilds+1
-        metrics.lastTiles=count
-        metrics.lastPixels=pixels
+        count=count+1
+        local area=region.width*region.height
+        pixels=pixels+area
+        peak=math.max(peak,area)
+        -- A region's temporary texture need not survive the subsequent
+        -- readback: do not accumulate a full document of temporary images.
+        image:release()
     end
-    metrics.totalPixels=metrics.totalPixels+metrics.lastPixels
+    self.compositeCanvas=canvas
+    self.compositeInvalidFull=false
+    self.compositeDirtyTiles={}
     self.compositeDirty=false
-    return self.compositeCanvas
+    if full then
+        metrics.fullBuilds=metrics.fullBuilds+1
+    else
+        metrics.partialBuilds=metrics.partialBuilds+1
+    end
+    metrics.lastBatches=count
+    metrics.lastTiles=full and
+        math.ceil(self.width/COMPOSITE_TILE)*
+        math.ceil(self.height/COMPOSITE_TILE) or count
+    metrics.lastPixels=pixels
+    metrics.totalPixels=metrics.totalPixels+pixels
+    metrics.peakRegionPixels=math.max(metrics.peakRegionPixels,peak)
+    -- Count regional source reads, separate from the final composite GPU
+    -- and from LÖVE's internally managed memory allocations.
+    local visible=0
+    for _,layer in ipairs(self.layers) do
+        if layer.visible and layer.opacity>0 then
+            visible=visible+1
+        end
+    end
+    metrics.regionReads=metrics.regionReads+count*visible
+    return canvas
 end
 
--- Useful both for profiling and for a visible cache indicator in the UI.
+-- Profiling counters describe work performed, not measured RAM or elapsed
+-- time. peakRegionPixels bounds one temporary RGBA buffer at a time.
 function Document:compositorStats()
     local m=self.compositeMetrics
     return {fullBuilds=m.fullBuilds,partialBuilds=m.partialBuilds,
         lastTiles=m.lastTiles,lastPixels=m.lastPixels,
-        totalPixels=m.totalPixels,tileSize=COMPOSITE_TILE}
+        totalPixels=m.totalPixels,tileSize=COMPOSITE_TILE,
+        buildTileSize=COMPOSITE_BUILD_TILE,lastBatches=m.lastBatches,
+        peakRegionPixels=m.peakRegionPixels,regionReads=m.regionReads}
 end
 
 -- Atualiza uma camada inteira como uma unica operacao de desfazer.

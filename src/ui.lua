@@ -909,8 +909,8 @@ function UI:drawLayersPanel(app,x,w,h)
     end)
     if doc:hasBlendLayers() then
         local stats=doc:compositorStats()
-        self:print(("Compositor C++: %d tiles | %d px"):format(
-            stats.lastTiles,stats.lastPixels),
+        self:print(("Compositor: %d tiles | pico %d px"):format(
+            stats.lastTiles,stats.peakRegionPixels),
             x+3,base+275,C.muted,self.small,w-6)
     else
         self:print("Compositor GPU direto",x+3,base+275,
