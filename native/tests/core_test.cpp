@@ -21,7 +21,7 @@ static uint8_t px(const std::vector<uint8_t>& image,int x,int y,int c) {
     return image[(y*W+x)*4+c];
 }
 int main() {
-    assert(inkora_core_api_version()==10);
+    assert(inkora_core_api_version()==11);
     std::vector<uint8_t> data(W*H*4,0);
     auto s=sample(data);
     InkoraStrokeState state{0,0};

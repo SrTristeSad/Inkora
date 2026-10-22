@@ -668,45 +668,56 @@ function UI:drawTexturePanel(app,x,w,h)
 end
 
 function UI:drawWetPanel(app,x,w,h)
-    self:print("TINTA UMIDA",x,155,C.white)
-    self:print("Mistura com as cores da propria camada",x,181,C.muted,self.small,w)
-    self:print("C++ v10 - pigmentos e transparencias",x,204,C.muted,self.small,w)
-    self:slider(x+12,275,w-24,app.brushWetness,"Umidade",function(v)
-        app.brushWetness=v
-    end,tostring(math.floor(app.brushWetness*100+0.5)).."%")
-    self:slider(x+12,372,w-24,app.brushPigmentLoad,"Carga de pigmento",function(v)
-        app.brushPigmentLoad=v
-    end,tostring(math.floor(app.brushPigmentLoad*100+0.5)).."%")
-    self:print("COMPARACAO DE TINTA",x,448,C.white,self.small)
-    self:print("Mesma cor sobre vermelho e azul",x,468,C.muted,self.small)
+    self:print("TINTA E PIGMENTO",x,155,C.white)
+    self:print("Mistura e transporte dentro da camada",x,181,C.muted,self.small,w)
+    self:print("Motor C++ v11 - reservatorio por pincelada",x,204,C.muted,self.small,w)
+    local sliders={
+        {"Umidade",app.brushWetness,function(v) app.brushWetness=v end},
+        {"Carga de pigmento",app.brushPigmentLoad,function(v)
+            app.brushPigmentLoad=v
+        end},
+        {"Captacao da cor",app.brushPigmentPickup,function(v)
+            app.brushPigmentPickup=v
+        end},
+        {"Retencao da cor",app.brushPigmentRetention,function(v)
+            app.brushPigmentRetention=v
+        end},
+    }
+    for i,p in ipairs(sliders) do
+        self:slider(x+12,256+(i-1)*58,w-24,p[2],p[1],p[3],
+            tostring(math.floor(p[2]*100+0.5)).."%")
+    end
+    self:print("COMPARACAO REAL DE PIGMENTO",x,469,C.white,self.small)
+    self:print("Uma cor sobre faixas azul e vermelha",x,489,C.muted,self.small)
     local strips={
-        {"PINCEL SECO",BrushPreview.getDryComparison(app),494},
-        {"PINCEL UMIDO",BrushPreview.getLive(app,true),591},
+        {"MISTURA LOCAL - SEM ARRASTE",BrushPreview.getLocalWetComparison(app),509},
+        {"TINTA COM ARRASTE",BrushPreview.getLive(app,true),603},
     }
     for _,entry in ipairs(strips) do
         self:print(entry[1],x+5,entry[3],C.muted,self.small)
-        self:rect(x+5,entry[3]+21,w-10,62,C.surface,10)
+        self:rect(x+5,entry[3]+21,w-10,57,C.surface,9)
         local img=entry[2]
         if img then
             local iw,ih=img:getDimensions()
             love.graphics.push("all")
-            love.graphics.setScissor(x+10,entry[3]+25,w-20,53)
+            love.graphics.setScissor(x+10,entry[3]+24,w-20,51)
             love.graphics.setColor(1,1,1,1)
-            love.graphics.draw(img,x+11,entry[3]+26,0,(w-22)/iw,51/ih)
+            love.graphics.draw(img,x+11,entry[3]+26,0,(w-22)/iw,47/ih)
             love.graphics.pop()
         else
-            self:print("Motor C++ indisponivel",x+15,entry[3]+42,
+            self:print("Motor C++ indisponivel",x+15,entry[3]+40,
                 C.muted,self.small,w-30)
         end
     end
-    self:button(x+4,716,(w-14)/2,33,"Salvar preset",function()
+    self:button(x+4,700,(w-14)/2,33,"Salvar preset",function()
         app:saveBrushProfile()
     end,"primary")
-    self:button(x+10+(w-14)/2,716,(w-14)/2,33,"Restaurar",function()
+    self:button(x+10+(w-14)/2,700,(w-14)/2,33,"Restaurar",function()
         app:resetBrushProfile()
     end)
-    if h>813 then
-        self:print("Mistura local, nao simula secagem fisica.",x+6,772,C.muted,self.small,w-12)
+    if h>800 then
+        self:print("Arraste por eventos, sem simulacao de secagem.",
+            x+6,752,C.muted,self.small,w-12)
     end
 end
 

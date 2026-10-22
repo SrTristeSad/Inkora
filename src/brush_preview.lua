@@ -7,6 +7,7 @@ local Preview={}
 local cards={}
 local live=nil
 local dryComparison=nil
+local localWetComparison=nil
 local WIDTH,HEIGHT=168,44
 
 local function signature(style,mask,ink)
@@ -21,6 +22,8 @@ local function signature(style,mask,ink)
         tostring(style.texture or 0),tostring(style.scatter or 0),
         tostring(style.sizeJitter or 0),
         tostring(style.wetness or 0),tostring(style.pigmentLoad or 1),
+        tostring(style.pigmentPickup or 0),
+        tostring(style.pigmentRetention or 0),
         tostring(style.demoWet or false),
         mask and tostring(mask.buffer) or "nomask",
         string.format("%.4f,%.4f,%.4f",
@@ -59,6 +62,8 @@ local function render(style,mask,ink)
         texture=style.texture or 0,scatter=style.scatter or 0,
         sizeJitter=style.sizeJitter or 0,
         wetness=style.wetness or 0,pigmentLoad=style.pigmentLoad or 1,
+        pigmentPickup=style.pigmentPickup or 0,
+        pigmentRetention=style.pigmentRetention or 0,
     })
     assert(session,"Motor C++ nao criou a previa de pincel")
     -- A scaled simulation makes small and big tips identifiable without
@@ -118,6 +123,8 @@ local function liveStyle(app,demo)
         texture=app.brushTexture,scatter=app.brushScatter,
         sizeJitter=app.brushSizeJitter,
         wetness=app.brushWetness,pigmentLoad=app.brushPigmentLoad,
+        pigmentPickup=app.brushPigmentPickup,
+        pigmentRetention=app.brushPigmentRetention,
         demoWet=not not demo,
     }
 end
@@ -132,6 +139,21 @@ function Preview.getLive(app,demo)
     if live and live.key==key then return live.canvas end
     live={key=key,canvas=render(style,mask,ink)}
     return live.canvas
+end
+
+function Preview.getLocalWetComparison(app)
+    if not Native.available() then return nil end
+    local style=liveStyle(app,true)
+    style.pigmentPickup=0
+    style.pigmentRetention=0
+    local mask=style.tip==3 and app.tipMask or nil
+    if style.tip==3 and not mask then return nil end
+    local ink=app.color or {0.28,0.73,0.93}
+    local key=signature(style,mask,ink)
+    if not localWetComparison or localWetComparison.key~=key then
+        localWetComparison={key=key,canvas=render(style,mask,ink)}
+    end
+    return localWetComparison.canvas
 end
 
 function Preview.getDryComparison(app)
@@ -158,6 +180,7 @@ function Preview.invalidate(id)
     end
     live=nil
     dryComparison=nil
+    localWetComparison=nil
 end
 
 function Preview.stats()

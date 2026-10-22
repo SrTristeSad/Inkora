@@ -17,7 +17,7 @@ bool approx(int v,int expected,int tolerance=2) {
     return std::abs(v-expected)<=tolerance;
 }
 int main() {
-    assert(inkora_core_api_version()==10);
+    assert(inkora_core_api_version()==11);
 
     Pixel white={255,255,255,255},red={255,0,0,255};
     Pixel composed=white;

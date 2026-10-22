@@ -677,19 +677,40 @@ local function run(app)
             diff=diff+math.abs(r1-r2)+math.abs(g1-g2)+math.abs(b1-b2)
         end end
         assert(diff>3,"Tinta umida e seca produziram as mesmas cores")
-        assert(UI:click(px+214,275),"Slider de umidade nao clicavel")
+        assert(UI:click(px+214,256),"Slider de umidade nao clicavel")
         UI:mousereleased()
         assert(app.brushWetness>0.60)
-        assert(UI:click(px+60,372),"Slider de carga nao clicavel")
+        assert(UI:click(px+60,314),"Slider de carga nao clicavel")
         UI:mousereleased()
         assert(app.brushPigmentLoad<0.40)
+        assert(UI:click(px+222,372),"Slider de captacao nao clicavel")
+        UI:mousereleased()
+        assert(app.brushPigmentPickup>0.7)
+        assert(UI:click(px+222,430),"Slider de retencao nao clicavel")
+        UI:mousereleased()
+        assert(app.brushPigmentRetention>0.7)
+        local localWet=BrushPreview.getLocalWetComparison(app)
+        local carryWet=BrushPreview.getLive(app,true)
+        assert(localWet and carryWet and localWet~=carryWet,
+            "Comparacao local x arraste nao foi criada")
+        local left=localWet:newImageData()
+        local right=carryWet:newImageData()
+        local pigmentDiff=0
+        for yy=8,36,3 do for xx=10,157,3 do
+            local lr,lg,lb=left:getPixel(xx,yy)
+            local rr,rg,rb=right:getPixel(xx,yy)
+            pigmentDiff=pigmentDiff+math.abs(lr-rr)+math.abs(lg-rg)+math.abs(lb-rb)
+        end end
+        assert(pigmentDiff>1,"Arraste nao alterou as cores na previa")
         local afterWet=BrushPreview.getLive(app,true)
         assert(afterWet~=beforeWet,"Umidade nao renovou a previa")
         love.draw()
-        assert(UI:click(px+41,734),"Salvar tinta umida nao clicavel")
+        assert(UI:click(px+41,713),"Salvar tinta umida nao clicavel")
         local wetProfile=require("src.brush_profiles").read().watercolor
         assert(wetProfile and wetProfile.wetness>0.6 and
-            wetProfile.pigmentLoad<0.4,"Config de pigmento nao foi salva")
+            wetProfile.pigmentLoad<0.4 and wetProfile.pigmentPickup>0.7
+            and wetProfile.pigmentRetention>0.7,
+            "Config de pigmento e reservatorio nao foi salva")
         assert(app:choosePreset("ink"))
         assert(app.brushWetness==0 and app.brushPigmentLoad==1,
             "Pincel seco foi afetado pelos controles de tinta")
@@ -698,9 +719,11 @@ local function run(app)
             "Configuracao de tinta umida nao foi restaurada")
         UI.tab="wet"
         love.draw()
-        assert(UI:click(px+200,734),"Restaurar tinta nao clicavel")
+        assert(UI:click(px+200,713),"Restaurar tinta nao clicavel")
         assert(math.abs(app.brushWetness-0.78)<0.001 and
-            math.abs(app.brushPigmentLoad-0.38)<0.001,
+            math.abs(app.brushPigmentLoad-0.38)<0.001 and
+            math.abs(app.brushPigmentPickup-0.70)<0.001 and
+            math.abs(app.brushPigmentRetention-0.78)<0.001,
             "Restaurar nao recuperou o preset Aquarela")
         app.color=priorColor
         -- Later cursor-placement smoke checks require an opaque solid nib:
@@ -708,6 +731,7 @@ local function run(app)
         assert(app:choosePreset("ink"))
         UI.tab="brush"
         love.draw()
+        print("INKORA_PIGMENT_CARRY_LUA_CPP_OK")
         print("INKORA_WET_PAINT_PREVIEW_PROFILES_OK")
 
         print("INKORA_TEXTURE_EDITABLE_PREVIEW_GPU_OK")

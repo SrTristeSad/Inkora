@@ -16,6 +16,7 @@ local app = {
     brushAngle=25, brushFollowPath=false,
     brushTexture=0,brushScatter=0,brushSizeJitter=0,
     brushWetness=0,brushPigmentLoad=1,
+    brushPigmentPickup=0,brushPigmentRetention=0,
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
     presetId="ink", profiles={}, pressureCurve="Linear",
     sampledPressure=nil,
@@ -276,6 +277,8 @@ function app:strokeStart(x,y,pressure)
         texture=self.brushTexture,scatter=self.brushScatter,
         sizeJitter=self.brushSizeJitter,
         wetness=self.brushWetness,pigmentLoad=self.brushPigmentLoad,
+        pigmentPickup=self.brushPigmentPickup,
+        pigmentRetention=self.brushPigmentRetention,
         alphaLock=layer.alphaLock,selection=self.doc.selection,
     })
     self.dragging={

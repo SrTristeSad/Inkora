@@ -201,15 +201,23 @@ void dab(const InkoraStroke &s,float cx,float cy,float pressure,
 }
 } // namespace
 
-extern "C" int32_t inkora_core_api_version(void) { return 10; }
+extern "C" int32_t inkora_core_api_version(void) { return 11; }
 
 static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
                           InkoraRect* dirty,const InkoraTip* tip,
                           const InkoraMask* mask,float flow,float pressureOpacity,
                           const InkoraPaintClip* clip,InkoraBrushDirection* direction,
                           InkoraBrushDynamics* dynamics,
-                          const InkoraWetPaint* wet) {
+                          const InkoraWetPaint* wet,
+                          InkoraPigmentCarry* carry) {
     if (!src || !state || !dirty || !valid(*src)) return 0;
+    if(carry) {
+        const float v[]={carry->pickup,carry->retention,
+            carry->sample_r,carry->sample_g,carry->sample_b,carry->sample_a,
+            carry->reservoir_r,carry->reservoir_g,carry->reservoir_b};
+        for(float x:v) if(!finite(x) || x<0.0f || x>1.0f) return 0;
+        if(carry->initialized!=0 && carry->initialized!=1) return 0;
+    }
     if(wet && (!finite(wet->wetness) || !finite(wet->pigment_load) ||
        wet->wetness<0.0f || wet->wetness>1.0f ||
        wet->pigment_load<0.0f || wet->pigment_load>1.0f)) return 0;
@@ -237,8 +245,31 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
     if(state->initialized!=0 && state->initialized!=1) return 0;
     if(!finite(state->distance_to_next)) return 0;
 
-    const InkoraStroke& s=*src;
+    InkoraStroke s=*src;
     *dirty={0,0,0,0};
+    if(carry && carry->pickup>0 && wet && wet->wetness>0 && !s.eraser) {
+        // A single sample is prepared by Lua before any tile is touched.
+        // All tiles start with identical reservoir state, including those
+        // not intersecting the point where the pigment was sampled.
+        if(!carry->initialized) {
+            carry->reservoir_r=saturate(s.r);
+            carry->reservoir_g=saturate(s.g);
+            carry->reservoir_b=saturate(s.b);
+            carry->initialized=1;
+        }
+        const float uptake=carry->pickup*carry->sample_a*wet->wetness;
+        carry->reservoir_r=carry->reservoir_r*(1-uptake)
+            +carry->sample_r*uptake;
+        carry->reservoir_g=carry->reservoir_g*(1-uptake)
+            +carry->sample_g*uptake;
+        carry->reservoir_b=carry->reservoir_b*(1-uptake)
+            +carry->sample_b*uptake;
+        // Retention means deposited pigment depends on the moving brush
+        // reservoir, rather than just on the selected palette color.
+        s.r=s.r*(1-carry->retention)+carry->reservoir_r*carry->retention;
+        s.g=s.g*(1-carry->retention)+carry->reservoir_g*carry->retention;
+        s.b=s.b*(1-carry->retention)+carry->reservoir_b*carry->retention;
+    }
     const float dx=s.x1-s.x0,dy=s.y1-s.y0;
     const float distance=std::sqrt(dx*dx+dy*dy);
     float nibAngle=0.0f;
@@ -280,26 +311,26 @@ static int32_t strokeImpl(const InkoraStroke* src,InkoraStrokeState* state,
 
 extern "C" int32_t inkora_core_stroke_v2(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty) {
-    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,nullptr,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v3(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip) {
-    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,nullptr,1.0f,0.0f,nullptr,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v4(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip,const InkoraMask* mask,float flow,float pressureOpacity) {
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,nullptr,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,nullptr,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v6(
     const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
     const InkoraTip* tip,const InkoraMask* mask,float flow,
     float pressureOpacity,const InkoraPaintClip* clip) {
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,nullptr,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,nullptr,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v8(
@@ -308,7 +339,7 @@ extern "C" int32_t inkora_core_stroke_v8(
     float pressureOpacity,const InkoraPaintClip* clip,
     InkoraBrushDirection* direction) {
     if(!direction) return 0;
-    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,direction,nullptr,nullptr);
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,clip,direction,nullptr,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v9(
@@ -318,7 +349,7 @@ extern "C" int32_t inkora_core_stroke_v9(
     InkoraBrushDirection* direction,InkoraBrushDynamics* dynamics) {
     if(!direction || !dynamics) return 0;
     return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,
-                      clip,direction,dynamics,nullptr);
+                      clip,direction,dynamics,nullptr,nullptr);
 }
 
 extern "C" int32_t inkora_core_stroke_v10(
@@ -329,7 +360,18 @@ extern "C" int32_t inkora_core_stroke_v10(
     const InkoraWetPaint* wet) {
     if(!direction || !dynamics || !wet) return 0;
     return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,
-                      clip,direction,dynamics,wet);
+                      clip,direction,dynamics,wet,nullptr);
+}
+
+extern "C" int32_t inkora_core_stroke_v11(
+    const InkoraStroke* src,InkoraStrokeState* state,InkoraRect* dirty,
+    const InkoraTip* tip,const InkoraMask* mask,float flow,
+    float pressureOpacity,const InkoraPaintClip* clip,
+    InkoraBrushDirection* direction,InkoraBrushDynamics* dynamics,
+    const InkoraWetPaint* wet,InkoraPigmentCarry* carry) {
+    if(!direction || !dynamics || !wet || !carry) return 0;
+    return strokeImpl(src,state,dirty,tip,mask,flow,pressureOpacity,
+                      clip,direction,dynamics,wet,carry);
 }
 
 extern "C" int32_t inkora_core_stroke(const InkoraStroke* src) {

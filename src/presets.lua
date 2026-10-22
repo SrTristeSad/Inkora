@@ -25,6 +25,7 @@ local Presets={
      hardness=0.35,spacing=0.08,opacity=0.68,flow=0.40,
      stabilization=0.22,tip=0,pressureOpacity=0.72,
      wetness=0.78,pigmentLoad=0.38,
+     pigmentPickup=0.70,pigmentRetention=0.78,
      preview="paint"},
     {id="pixel",name="Pixel",family="Precisao",size=3,hardness=1,
      spacing=0.1,opacity=1,flow=1,stabilization=0,tip=0,
@@ -43,6 +44,8 @@ for _,preset in ipairs(Presets) do
     if preset.sizeJitter==nil then preset.sizeJitter=0 end
     if preset.wetness==nil then preset.wetness=0 end
     if preset.pigmentLoad==nil then preset.pigmentLoad=1 end
+    if preset.pigmentPickup==nil then preset.pigmentPickup=0 end
+    if preset.pigmentRetention==nil then preset.pigmentRetention=0 end
 end
 
 function Presets.find(id)

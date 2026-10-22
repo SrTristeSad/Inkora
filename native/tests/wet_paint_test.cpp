@@ -46,7 +46,7 @@ static int pixel(const std::vector<uint8_t>& p,int x,int y,int channel) {
     return p[(y*W+x)*4+channel];
 }
 int main() {
-    assert(inkora_core_api_version()==10);
+    assert(inkora_core_api_version()==11);
     auto dry=render(0,1);
     auto wet=render(0.95f,0.25f);
     auto wetAgain=render(0.95f,0.25f);

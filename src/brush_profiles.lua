@@ -19,6 +19,8 @@ local FIELDS={
     {"sizeJitter",0,1},
     {"wetness",0,1},
     {"pigmentLoad",0,1},
+    {"pigmentPickup",0,1},
+    {"pigmentRetention",0,1},
 }
 
 local function checkValue(raw,field)
@@ -39,6 +41,8 @@ function Profiles.capture(app)
         texture=app.brushTexture,scatter=app.brushScatter,
         sizeJitter=app.brushSizeJitter,
         wetness=app.brushWetness,pigmentLoad=app.brushPigmentLoad,
+        pigmentPickup=app.brushPigmentPickup,
+        pigmentRetention=app.brushPigmentRetention,
     }
 end
 
@@ -73,6 +77,8 @@ function Profiles.apply(app,style)
     app.brushSizeJitter=style.sizeJitter or 0
     app.brushWetness=style.wetness or 0
     app.brushPigmentLoad=style.pigmentLoad or 1
+    app.brushPigmentPickup=style.pigmentPickup or 0
+    app.brushPigmentRetention=style.pigmentRetention or 0
 end
 
 function Profiles.read()
@@ -85,10 +91,10 @@ function Profiles.read()
             fields[#fields+1]=entry
         end
         local id=fields[1]
-        -- Accept 8/10/13-parameter profiles and current 15-parameter format.
+        -- Accept legacy 8/10/13/15-field profiles and current 17-field format.
         local n=#fields-1
         if id and Presets.find(id) and
-           (n==8 or n==10 or n==13 or n==#FIELDS) then
+           (n==8 or n==10 or n==13 or n==15 or n==#FIELDS) then
             local profile={}
             local valid=true
             local limit=n

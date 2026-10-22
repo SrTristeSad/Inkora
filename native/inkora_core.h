@@ -152,6 +152,24 @@ INKORA_API int32_t inkora_core_stroke_v10(
     InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics,
     const InkoraWetPaint *wet);
 
+// ABI v11: pigment is picked up from a single RGBA sample per input
+// segment, supplied by the caller BEFORE painting tiles. The mutable
+// reservoir persists across segments and is copied to all tiles using
+// the same original state. Zero pickup preserves ABI v10 exactly.
+typedef struct InkoraPigmentCarry {
+    float pickup, retention;
+    float sample_r, sample_g, sample_b, sample_a;
+    float reservoir_r, reservoir_g, reservoir_b;
+    int32_t initialized;
+} InkoraPigmentCarry;
+
+INKORA_API int32_t inkora_core_stroke_v11(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow,
+    float pressure_opacity, const InkoraPaintClip *clip,
+    InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics,
+    const InkoraWetPaint *wet, InkoraPigmentCarry *carry);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

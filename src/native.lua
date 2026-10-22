@@ -54,6 +54,12 @@ if ffiOK then
     typedef struct InkoraWetPaint {
         float wetness, pigment_load;
     } InkoraWetPaint;
+    typedef struct InkoraPigmentCarry {
+        float pickup, retention;
+        float sample_r, sample_g, sample_b, sample_a;
+        float reservoir_r, reservoir_g, reservoir_b;
+        int32_t initialized;
+    } InkoraPigmentCarry;
     typedef struct InkoraLayerEffects {
         const uint8_t *mask_rgba;
         uint64_t mask_bytes;
@@ -77,11 +83,12 @@ if ffiOK then
         int32_t width, int32_t height, float opacity, int32_t blend_mode,
         const InkoraLayerEffects *effects);
     int32_t inkora_core_api_version(void);
-    int32_t inkora_core_stroke_v10(const InkoraStroke *stroke,
+    int32_t inkora_core_stroke_v11(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
         const InkoraMask *mask, float flow, float pressure_opacity,
         const InkoraPaintClip *clip, InkoraBrushDirection *direction,
-        InkoraBrushDynamics *dynamics, const InkoraWetPaint *wet);
+        InkoraBrushDynamics *dynamics, const InkoraWetPaint *wet,
+        InkoraPigmentCarry *carry);
     ]]
 end
 
@@ -113,11 +120,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==10 then
+            if vok and version==11 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v10)"
+            Native.error="ABI C++ incompativel (requer v11)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -236,11 +243,12 @@ function Native.beginStroke(canvas,settings)
     return {cache=cache,canvas=canvas,settings=settings or {},
         state=ffi.new("InkoraStrokeState[1]"),
         direction=ffi.new("InkoraBrushDirection[1]"),
-        dynamics=ffi.new("InkoraBrushDynamics[1]")}
+        dynamics=ffi.new("InkoraBrushDynamics[1]"),
+        carry=ffi.new("InkoraPigmentCarry[1]")}
 end
 
 local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
-                         eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics)
+                         eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry)
     local stroke=ffi.new("InkoraStroke[1]")
     local s=stroke[0]
     s.pixels=ffi.cast("uint8_t*",tile.data:getFFIPointer())
@@ -296,10 +304,21 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
     local wet=ffi.new("InkoraWetPaint[1]")
     wet[0].wetness=session.settings.wetness or 0
     wet[0].pigment_load=session.settings.pigmentLoad or 1
+    local carry=ffi.new("InkoraPigmentCarry[1]")
+    carry[0].pickup=session.settings.pigmentPickup or 0
+    carry[0].retention=session.settings.pigmentRetention or 0
+    carry[0].sample_r=originalCarry.sample_r
+    carry[0].sample_g=originalCarry.sample_g
+    carry[0].sample_b=originalCarry.sample_b
+    carry[0].sample_a=originalCarry.sample_a
+    carry[0].reservoir_r=originalCarry.reservoir_r
+    carry[0].reservoir_g=originalCarry.reservoir_g
+    carry[0].reservoir_b=originalCarry.reservoir_b
+    carry[0].initialized=originalCarry.initialized
     local dirty=ffi.new("InkoraRect[1]")
-    if Native.library.inkora_core_stroke_v10(stroke,localState,dirty,tip,mask,
+    if Native.library.inkora_core_stroke_v11(stroke,localState,dirty,tip,mask,
             session.settings.flow or 1,session.settings.pressureOpacity or 0,
-            clip,direction,dynamic,wet)~=1 then
+            clip,direction,dynamic,wet,carry)~=1 then
         error("Motor C++ recusou segmento por tile")
     end
     return {x=tonumber(dirty[0].x),y=tonumber(dirty[0].y),
@@ -308,7 +327,11 @@ local function paintTile(session,tile,x0,y0,x1,y1,color,diameter,opacity,
          initialized=tonumber(localState[0].initialized)},
         {angle_degrees=tonumber(direction[0].angle_degrees),
          initialized=tonumber(direction[0].initialized)},
-        {stamp_index=tonumber(dynamic[0].stamp_index)}
+        {stamp_index=tonumber(dynamic[0].stamp_index)},
+        {reservoir_r=tonumber(carry[0].reservoir_r),
+         reservoir_g=tonumber(carry[0].reservoir_g),
+         reservoir_b=tonumber(carry[0].reservoir_b),
+         initialized=tonumber(carry[0].initialized)}
 end
 
 local function updateTile(session,tile,r)
@@ -339,16 +362,16 @@ local function union(a,b)
 end
 
 local function advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
-                            eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics)
+                            eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry)
     -- Sem tiles visiveis: avance a fase de spacing via um bitmap descartavel.
     local empty={x=-10000,y=-10000,w=1,h=1,data=session.dummy}
     if not empty.data then
         session.dummy=love.image.newImageData(1,1,"rgba8")
         empty.data=session.dummy
     end
-    local _,updated,updatedDirection,updatedDynamics=paintTile(session,empty,x0,y0,x1,y1,color,diameter,opacity,
-        eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics)
-    return updated,updatedDirection,updatedDynamics
+    local _,updated,updatedDirection,updatedDynamics,updatedCarry=paintTile(session,empty,x0,y0,x1,y1,color,diameter,opacity,
+        eraser,pressure0,pressure1,originalState,originalDirection,originalDynamics,originalCarry)
+    return updated,updatedDirection,updatedDynamics,updatedCarry
 end
 
 function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressure0,pressure1)
@@ -369,6 +392,32 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
     local originalDynamics={
         stamp_index=tonumber(session.dynamics[0].stamp_index)
     }
+    -- Obtain one pigment sample from the END of the unpainted segment.
+    -- Sampling before any tile update makes all tile results identical.
+    local oldCarry=session.carry[0]
+    local originalCarry={
+        reservoir_r=tonumber(oldCarry.reservoir_r),
+        reservoir_g=tonumber(oldCarry.reservoir_g),
+        reservoir_b=tonumber(oldCarry.reservoir_b),
+        initialized=tonumber(oldCarry.initialized),
+        sample_r=0,sample_g=0,sample_b=0,sample_a=0,
+    }
+    if not eraser and (session.settings.pigmentPickup or 0)>0
+       and (session.settings.wetness or 0)>0 then
+        local px=math.floor(x1)
+        local py=math.floor(y1)
+        local selected=session.settings.selection
+        if px>=0 and py>=0 and px<cache.width and py<cache.height
+           and (not selected or (px>=selected.x0 and px<selected.x1
+               and py>=selected.y0 and py<selected.y1)) then
+            local tile=getTile(cache,session.canvas,
+                math.floor(px/TILE_SIZE),math.floor(py/TILE_SIZE))
+            originalCarry.sample_r,originalCarry.sample_g,
+                originalCarry.sample_b,originalCarry.sample_a=
+                tile.data:getPixel(px-tile.x,py-tile.y)
+        end
+    end
+    local newCarry=nil
     local newDynamics=nil
     local newDirection=nil
     local newState=nil
@@ -379,11 +428,12 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
         for ty=math.floor(top/TILE_SIZE),math.floor(bottom/TILE_SIZE) do
             for tx=math.floor(left/TILE_SIZE),math.floor(right/TILE_SIZE) do
                 local tile=getTile(cache,session.canvas,tx,ty)
-                local dirty,state,turned,changedDab=paintTile(session,tile,x0,y0,x1,y1,color,diameter,
-                    opacity,eraser,pressure0,pressure1,initial,originalDirection,originalDynamics)
+                local dirty,state,turned,changedDab,changedCarry=paintTile(session,tile,x0,y0,x1,y1,color,diameter,
+                    opacity,eraser,pressure0,pressure1,initial,originalDirection,originalDynamics,originalCarry)
                 newState=state
                 newDirection=turned
                 newDynamics=changedDab
+                newCarry=changedCarry
                 if dirty.width>0 and dirty.height>0 then
                     local updated=updateTile(session,tile,dirty)
                     bounds=union(bounds,updated)
@@ -393,14 +443,18 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
         end
     end
     if not newState then
-        newState,newDirection,newDynamics=advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
-            eraser,pressure0,pressure1,initial,originalDirection,originalDynamics)
+        newState,newDirection,newDynamics,newCarry=advanceState(session,x0,y0,x1,y1,color,diameter,opacity,
+            eraser,pressure0,pressure1,initial,originalDirection,originalDynamics,originalCarry)
     end
     session.state[0].distance_to_next=newState.distance_to_next
     session.state[0].initialized=newState.initialized
     session.direction[0].angle_degrees=newDirection.angle_degrees
     session.direction[0].initialized=newDirection.initialized
     session.dynamics[0].stamp_index=newDynamics.stamp_index
+    session.carry[0].reservoir_r=newCarry.reservoir_r
+    session.carry[0].reservoir_g=newCarry.reservoir_g
+    session.carry[0].reservoir_b=newCarry.reservoir_b
+    session.carry[0].initialized=newCarry.initialized
 
     Native.lastUpload=bounds or {x=0,y=0,width=0,height=0}
     Native.lastUpload.pixels=pixels
