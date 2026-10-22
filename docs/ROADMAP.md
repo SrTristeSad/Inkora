@@ -25,7 +25,9 @@
 - [x] Mover **um pincel real** do prototipo Lua para C++ com trajetoria, espessura, espacamento, alpha e testes visuais/regressao. Nao remover o caminho Lua antigo antes de passar testes.
 
 ### Fase 2 — Motor de pintura
-- [ ] Pincéis profissionais: interpolação avançada, textura contínua, tinta úmida, estabilização profissional e pressão Windows Ink/WinTab.
+- [ ] Pincéis profissionais: interpolação avançada, textura contínua, tinta úmida, estabilização profissional completa e pressão Windows Ink/WinTab.
+- [x] Primeiro estabilizador adaptativo à taxa de eventos e à velocidade do cursor (filtro de baixa passagem variável), com conclusão amostrada do traço e cursor/traço suavizado visível.
+- [x] A prévia em C++ também simula estabilização; teste puro Lua para variação de taxa/tremor e teste gráfico integrado ao C++.
 - [x] Ponta personalizada por PNG até 512×512, máscara alfa (ou luminância invertida), com armazenamento local.
 - [x] Fluxo básico por carimbo e dinâmica linear de opacidade conforme pressão, via C++ ABI v4.
 - [x] Três pontas nativas iniciais (redonda, chata, granulada procedural), com API C++ v3 e testes.
@@ -47,7 +49,7 @@
 - [x] Primeira reformulação visual: biblioteca de oito presets funcionais, miniaturas em camadas, seletor HSV, área de pintura central e barra de ferramentas compacta.
 - [x] Favoritos persistentes na biblioteca e filtro funcional de pincéis.
 - [x] Miniaturas de pincéis renderizadas com o motor C++ e cache por preset.
-- [x] Prévia dinâmica, cache de um único canvas de prévia, reflexo da ponta, fluxo, pressão, opacidade e cor selecionada.
+- [x] Prévia dinâmica, cache de um único canvas de prévia, reflexo da ponta, fluxo, pressão, opacidade, estabilização e cor selecionada.
 - [x] Salvar/restaurar configuração individual de cada preset no disco, com validação dos valores e miniaturas atualizadas.
 - [x] Biblioteca filtrável por categorias de pincéis, combinável com favoritos.
 - [x] Inspetor lateral de largura ajustável por arraste, preservando o enquadramento do documento.

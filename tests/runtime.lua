@@ -582,6 +582,40 @@ local function run(app)
         assert(math.abs(app.zoom-oldZoom)<0.001)
         UI.tab="brush"
         love.draw()
+        -- Native C++ paint remains continuous with new adaptive
+        -- stabilization at a simulated 60Hz and the tail lands on release.
+        app.stabilization=0.97
+        app:choosePreset("pencil")
+        app.stabilization=0.97
+        local startDocX,startDocY=app.doc.width/2,app.doc.height/2-70
+        local startX,startY=app:documentToScreen(startDocX,startDocY)
+        assert(app:strokeStart(startX,startY) == nil)
+        local eX,eY=startX,startY
+        for i=1,22 do
+            eX,eY=app:documentToScreen(
+                startDocX+i*2,startDocY+math.sin(i*2.6)*2)
+            app:strokeMove(eX,eY,1,1/60)
+        end
+        local pending=app.dragging.smoother
+        assert(pending.samples==22,
+            "Estabilizador nao recebeu os eventos de movimento")
+        local filteredX=app.dragging.x
+        assert(filteredX<startDocX+44,
+            "Estabilizacao forte nao suavizou o acompanhamento do cursor")
+        app:strokeEnd(eX,eY,1)
+        local endX,endY=app:screenToDocument(eX,eY)
+        assert(math.abs(app.dragging.smoother.x-endX)<0.001 and
+            math.abs(app.dragging.smoother.y-endY)<0.001,
+            "Final do traco estabilizado nao chegou ao cursor")
+        local pixels=app.doc.layers[app.doc.selected].canvas:newImageData()
+        local _,_,_,alpha=pixels:getPixel(
+            math.floor(endX),math.floor(endY))
+        assert(alpha>0.10,
+            "Cauda do traco estabilizado nao foi pintada pelo C++")
+        app.dragging=nil
+        app.stabilization=0.4
+        print("INKORA_ADAPTIVE_STABILIZER_CPP_BRIDGE_OK")
+
         print("INKORA_ROTATION_FAVORITES_OK")
         print("INKORA_DESKTOP_UI_BRUSH_LIBRARY_OK")
     end

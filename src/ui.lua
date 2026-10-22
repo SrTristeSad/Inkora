@@ -553,7 +553,7 @@ function UI:drawSettings(app,x,w,h)
         {"Espacamento",(app.brushSpacing-0.03)/0.47,function(v)
             app.brushSpacing=0.03+v*0.47
         end,tostring(math.floor(app.brushSpacing*100+0.5)).."%"},
-        {"Estabilizacao",app.stabilization,function(v)
+        {"Estabilizacao adaptativa",app.stabilization,function(v)
             app.stabilization=v
         end,tostring(math.floor(app.stabilization*100+0.5)).."%"},
         {"Pressao na opacidade",app.pressureOpacity,function(v)

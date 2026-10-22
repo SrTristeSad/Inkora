@@ -247,22 +247,29 @@ function app:strokeStart(x,y,pressure)
     self.dragging={
         kind="draw",x=dx,y=dy,nativeStroke=nativeStroke,pressure=pressure or 1,
         smoother=Stabilizer.new(dx,dy,self.stabilization),
+        lastTick=love.timer.getTime(),
+        targetX=dx,targetY=dy,
     }
     Brush.segment(layer.canvas,dx,dy,dx,dy,self.color,self.brushSize,
         self.brushOpacity,self.tool=="eraser",self.dragging.nativeStroke,
         self.dragging.pressure,self.dragging.pressure)
 end
 
-function app:strokeMove(x,y,pressure)
+function app:strokeMove(x,y,pressure,dt)
     local drag=self.dragging
     if not drag or drag.kind~="draw" then return end
     local targetX,targetY=self:screenToDocument(x,y)
-    local dx,dy=drag.smoother:push(targetX,targetY)
+    local now=love.timer.getTime()
+    local elapsed=dt or (now-drag.lastTick)
+    drag.lastTick=now
+    drag.targetX,drag.targetY=targetX,targetY
+    local dx,dy=drag.smoother:push(targetX,targetY,elapsed)
     local layer=self.doc.layers[self.doc.selected]
+    local nextPressure=pressure or 1
     Brush.segment(layer.canvas,drag.x,drag.y,dx,dy,self.color,
         self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke,
-        drag.pressure,pressure or 1)
-    drag.pressure=pressure or 1
+        drag.pressure,nextPressure)
+    drag.pressure=nextPressure
     drag.x,drag.y=dx,dy
     self.doc:markCompositeDirty()
 end
@@ -270,11 +277,18 @@ end
 function app:strokeEnd(x,y,pressure)
     local drag=self.dragging
     if not drag or drag.kind~="draw" then return end
-    local dx,dy=self:screenToDocument(x,y)
-    dx,dy=drag.smoother:finish(dx,dy)
-    Brush.segment(self.doc.layers[self.doc.selected].canvas,drag.x,drag.y,
-        dx,dy,self.color,self.brushSize,self.brushOpacity,self.tool=="eraser",
-        drag.nativeStroke,drag.pressure,pressure or 1)
+    local targetX,targetY=self:screenToDocument(x,y)
+    local tail=drag.smoother:finishPath(targetX,targetY,self.brushSize)
+    local canvas=self.doc.layers[self.doc.selected].canvas
+    local finalPressure=pressure or 1
+    for i,point in ipairs(tail) do
+        local t=i/#tail
+        local samplePressure=drag.pressure+(finalPressure-drag.pressure)*t
+        Brush.segment(canvas,drag.x,drag.y,point[1],point[2],
+            self.color,self.brushSize,self.brushOpacity,
+            self.tool=="eraser",drag.nativeStroke,drag.pressure,samplePressure)
+        drag.x,drag.y,drag.pressure=point[1],point[2],samplePressure
+    end
     self.doc:markCompositeDirty()
 end
 
@@ -385,12 +399,18 @@ function love.load()
     end
     local preview=os.getenv("INKORA_PREVIEW")
     if preview=="brush" or preview=="layers" or preview=="color"
-        or preview=="rotate" or preview=="settings" then
+        or preview=="rotate" or preview=="settings"
+        or preview=="stabilization" then
         require("tests.preview").seed(app)
         if preview=="rotate" then
             local l,t,r,b=workspace()
             app:rotateAt(28,(l+r)/2,(t+b)/2)
             app.ui.tab="brush"
+        elseif preview=="stabilization" then
+            app:choosePreset("pencil")
+            app.stabilization=0.96
+            app.ui.tab="settings"
+            app:statusMessage("Estabilizacao adaptativa - previa em tempo real")
         else app.ui.tab=preview end
         app._previewName=preview
     end
@@ -494,6 +514,19 @@ function love.draw()
             love.graphics.setLineWidth(1)
             love.graphics.circle("line",mx,my,radius)
         end
+    end
+    if app.dragging and app.dragging.kind=="draw"
+        and app.stabilization>0 and app.dragging.smoother then
+        local d=app.dragging
+        local sx,sy=app:documentToScreen(d.x,d.y)
+        local tx,ty=app:documentToScreen(d.targetX,d.targetY)
+        love.graphics.push("all")
+        love.graphics.setLineWidth(1)
+        love.graphics.setColor(0.98,0.98,0.98,0.35)
+        love.graphics.line(sx,sy,tx,ty)
+        love.graphics.setColor(0.44,0.82,0.91,0.92)
+        love.graphics.circle("line",sx,sy,4.5)
+        love.graphics.pop()
     end
     app.ui:draw(app)
     if app._previewName and not app._captureQueued then

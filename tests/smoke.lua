@@ -21,6 +21,57 @@ assert(x>0 and x<100 and y>0 and y<20, "Estabilizacao nao funcionou")
 x,y=s:finish(100,20)
 assert(x==100 and y==20, "Final da linha deveria alcançar cursor")
 
+-- Time-normalized stabilization: slow hand tremor is filtered, faster
+-- intended movement remains responsive. Tests are deterministic by dt.
+local function trace(strength,dt,frequency)
+    local filter=smoother.new(0,0,strength)
+    local points={}
+    local steps=math.floor(1/dt+0.5)
+    for i=1,steps do
+        local t=i*dt
+        local tx=300*t
+        local ty=50+3*math.sin(t*frequency*2*math.pi)
+        local fx,fy=filter:push(tx,ty,dt)
+        points[#points+1]={fx,fy}
+    end
+    return filter,points
+end
+local fast,highRate=trace(0.8,1/120,12)
+local slow,lowRate=trace(0.8,1/30,12)
+assert(math.abs(fast.x-slow.x)<12,
+    "Estabilizador varia exageradamente por frequencia de eventos")
+assert(math.abs(fast.y-slow.y)<12,
+    "Estabilizador altera demais a posicao com frequencias distintas")
+
+local flat=smoother.new(100,50,0)
+for i=1,60 do
+    local xx,yy=flat:push(100+i*2,50+math.sin(i)*2,1/60)
+    assert(xx==100+i*2 and yy==50+math.sin(i)*2,
+        "Forca zero deve retornar posicao exata")
+end
+local sFiltered=smoother.new(100,50,1)
+local rawVariation,filteredVariation=0,0
+local py,pf=50,50
+for i=1,120 do
+    local y=50+2.2*math.sin(i*2.6)
+    local _,fy=sFiltered:push(100+i*0.2,y,1/120)
+    rawVariation=rawVariation+math.abs(y-py)
+    filteredVariation=filteredVariation+math.abs(fy-pf)
+    py,pf=y,fy
+end
+assert(filteredVariation<rawVariation*0.25,
+    "Filtro nao reduziu o tremor na trajetoria")
+local tail=sFiltered:finishPath(150,60,10)
+assert(#tail>1 and #tail<=64,"Cauda do traco nao foi amostrada")
+for i,point in ipairs(tail) do
+    assert(point[1]==point[1] and point[2]==point[2])
+    if i>1 then assert(point[1]>=tail[i-1][1]) end
+end
+assert(math.abs(tail[#tail][1]-150)<1e-8 and
+    math.abs(tail[#tail][2]-60)<1e-8,
+    "Finalizacao nao alcançou ponteiro")
+print("INKORA_ADAPTIVE_STABILIZER_OK")
+
 local function fakeImage(lines)
     local h,w=#lines,#lines[1]
     local p={}

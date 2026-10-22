@@ -2,6 +2,7 @@
 -- actual canvas. Only the most recent live preview is retained.
 local Brush=require("src.brush")
 local Native=require("src.native")
+local Stabilizer=require("src.stabilizer")
 local Preview={}
 local cards={}
 local live=nil
@@ -14,6 +15,7 @@ local function signature(style,mask,ink)
         tostring(style.size),tostring(style.hardness),
         tostring(style.spacing),tostring(style.opacity),
         tostring(style.flow),tostring(style.pressureOpacity),
+        tostring(style.stabilization or 0),
         mask and tostring(mask.buffer) or "nomask",
         string.format("%.4f,%.4f,%.4f",
             ink[1] or 0,ink[2] or 0,ink[3] or 0)
@@ -38,19 +40,30 @@ local function render(style,mask,ink)
     -- A scaled simulation makes small and big tips identifiable without
     -- clipping most of the preview on a 44px-tall thumbnail.
     local diameter=math.min(25,math.max(2,style.size*0.58))
-    local points=23
+    local points=45
     local x0,y0=9,24
+    local smoother=Stabilizer.new(x0,y0,style.stabilization or 0)
     local pressure0=0.5
     Brush.segment(canvas,x0,y0,x0,y0,ink,diameter,
         style.opacity,false,session,pressure0,pressure0)
     for i=1,points do
         local t=i/points
-        local x=9+148*t
-        local y=22+math.sin(t*math.pi*2)*6
+        local targetX=9+148*t
+        -- The high-frequency movement is deliberate: increasing the
+        -- stabilizer strength smooths it in this native C++ preview.
+        local targetY=22+math.sin(t*math.pi*2)*7
+            +math.sin(t*math.pi*24)*3
         local pressure=0.45+0.5*math.sin(t*math.pi)^2
+        local x,y=smoother:push(targetX,targetY,1/90)
         Brush.segment(canvas,x0,y0,x,y,ink,diameter,
             style.opacity,false,session,pressure0,pressure)
         x0,y0,pressure0=x,y,pressure
+    end
+    local tail=smoother:finishPath(157,22,diameter)
+    for _,point in ipairs(tail) do
+        Brush.segment(canvas,x0,y0,point[1],point[2],ink,diameter,
+            style.opacity,false,session,pressure0,pressure0)
+        x0,y0=point[1],point[2]
     end
     return canvas
 end
@@ -76,6 +89,7 @@ function Preview.getLive(app)
         id="live",size=app.brushSize,hardness=app.brushHardness,
         spacing=app.brushSpacing,opacity=app.brushOpacity,
         flow=app.brushFlow,pressureOpacity=app.pressureOpacity,
+        stabilization=app.stabilization,
         tip=app.brushTip,
     }
     local mask=style.tip==3 and app.tipMask or nil
