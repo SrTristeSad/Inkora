@@ -583,6 +583,37 @@ local function run(app)
             "Undo nao recuperou a mascara intacta")
         assert(cow:redo() and cow.layers[1].mask~=previousMask,
             "Redo nao recuperou a mascara invertida")
+        -- Regression: the real UI entrypoint must paint the detached Canvas
+        -- after a structural checkpoint; a stale layer alias draws invisibly
+        -- into the snapshot and breaks both the document and undo/redo.
+        local appDoc=Doc.new(256,256,"Pincel via interface apos COW")
+        local oldCanvas=appDoc.layers[1].canvas
+        appDoc:toggleLayer(1)
+        appDoc:toggleLayer(1)
+        local uiStroke=setmetatable({
+            doc=appDoc,tool="brush",zoom=1,offsetX=0,offsetY=0,
+            rotation=0,brushSize=24,brushOpacity=1,stabilization=0,
+            color={0.96,0.18,0.06}
+        },{__index=app})
+        uiStroke:strokeStart(73.5,73.5,1)
+        assert(uiStroke.dragging and uiStroke.dragging.kind=="draw")
+        uiStroke:strokeEnd(73.5,73.5,1)
+        local newCanvas=appDoc.layers[1].canvas
+        assert(newCanvas~=oldCanvas,
+            "Pincel via UI nao separou Canvas guardado no historico")
+        local _,_,_,paintedAlpha=newCanvas:newImageData(1,1,73,73,1,1):getPixel(0,0)
+        local _,_,_,historyAlpha=oldCanvas:newImageData(1,1,73,73,1,1):getPixel(0,0)
+        assert(paintedAlpha>0.5 and historyAlpha<0.01,
+            "Inicio de pincelada escreveu no Canvas antigo")
+        assert(appDoc:undo())
+        local _,_,_,undoneAlpha=appDoc.layers[1].canvas:
+            newImageData(1,1,73,73,1,1):getPixel(0,0)
+        assert(undoneAlpha<0.01,"Undo da pincelada de UI falhou")
+        assert(appDoc:redo())
+        local _,_,_,redoneAlpha=appDoc.layers[1].canvas:
+            newImageData(1,1,73,73,1,1):getPixel(0,0)
+        assert(redoneAlpha>0.5,"Redo da pincelada de UI falhou")
+        print("INKORA_UI_COW_BRUSH_UNDO_REDO_GPU_OK")
         print("INKORA_STRUCTURAL_COPY_ON_WRITE_GPU_OK")
         print("INKORA_REGIONAL_BRUSH_UNDO_REDO_GPU_OK")
         print("INKORA_BOUNDED_INITIAL_COMPOSITOR_GPU_OK")
