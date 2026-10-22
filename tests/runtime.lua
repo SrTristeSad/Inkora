@@ -1327,6 +1327,84 @@ local function run(app)
         newImageData(1,1,128,128,1,1):getPixel(0,0)
     assert(a>0.2,"Pintura nao persistiu entre galeria e editor")
     print("INKORA_HOME_GALLERY_CREATE_REOPEN_GPU_OK")
+
+    -- Gallery parity: thumbnail opens a detail first; Edit reopens the
+    -- native canvas. Metadata, duplication and trash retain raster bytes.
+    local savedDoc=require("src.document")
+    assert(app:returnToGallery())
+    love.draw()
+    local galleryHit=nil
+    for _,hit in ipairs(app.startup.hits) do
+        if hit.kind:match("^gallery%-art%-") then
+            galleryHit=hit
+            break
+        end
+    end
+    assert(galleryHit,"Galeria nao desenhou miniaturas clicaveis")
+    assert(app.startup:click(galleryHit.x+galleryHit.w/2,
+        galleryHit.y+galleryHit.h/2))
+    assert(app.startup.galleryDetailKey,
+        "Miniatura deveria abrir visualizacao ampliada antes de editar")
+    love.draw()
+    clickStartup("gallery-edit")
+    assert(app.screen=="editor","Botao Editar nao abriu o motor de pintura")
+    assert(app:returnToGallery())
+    app.startup.galleryDetailKey=key
+
+    -- % must survive Lua gsub replacement; renaming cannot alter layers.
+    app.startup:galleryRename()
+    assert(app.startup.galleryModal.kind=="rename")
+    app.startup.galleryModal.value="Arte 100% original"
+    app.startup:galleryConfirmRename()
+    assert(not app.startup.galleryModal)
+    assert(app.startup:galleryProject(key).name=="Arte 100% original")
+    local renamed=savedDoc.load(key)
+    assert(renamed.name=="Arte 100% original")
+    local _,_,_,renamedAlpha=renamed.layers[1].canvas:
+        newImageData(1,1,128,128,1,1):getPixel(0,0)
+    assert(renamedAlpha>0.2,"Renomear modificou pixels")
+
+    app.startup:galleryDuplicate()
+    local copied=app.startup.galleryDetailKey
+    assert(copied and copied~=key and
+        love.filesystem.getInfo("projects/"..copied.."/manifest.txt","file"),
+        "Duplicar nao preservou projeto original")
+    local copyDoc=savedDoc.load(copied)
+    assert(copyDoc.width==256 and copyDoc.height==256)
+    local _,_,_,copyAlpha=copyDoc.layers[1].canvas:
+        newImageData(1,1,128,128,1,1):getPixel(0,0)
+    assert(copyAlpha>0.2,"Duplicar perdeu a pintura")
+    assert(love.filesystem.getInfo("projects/"..key.."/manifest.txt","file"),
+        "Duplicar apagou o original")
+
+    app.startup:galleryAskTrash()
+    assert(app.startup.galleryModal.kind=="trash",
+        "Lixeira nao pediu confirmacao")
+    love.draw()
+    clickStartup("modal-cancel")
+    assert(love.filesystem.getInfo("projects/"..copied.."/manifest.txt","file"),
+        "Cancelar remocao alterou arquivos")
+    app.startup:galleryAskTrash()
+    app.startup:galleryTrashConfirmed()
+    assert(not love.filesystem.getInfo("projects/"..copied),
+        "Obra excluida permaneceu ativa")
+    assert(love.filesystem.getInfo("deleted/"..copied.."/manifest.txt","file"),
+        "A copia de seguranca da lixeira nao existe")
+    app.startup:galleryRestore()
+    assert(love.filesystem.getInfo("projects/"..copied.."/manifest.txt","file"),
+        "Restaurar lixeira nao recuperou obra")
+
+    app.startup.galleryDetailKey=nil
+    app.startup:galleryToggleSelection()
+    assert(app.startup.gallerySelecting)
+    app.startup:galleryOpenDetail(key)
+    assert(app.startup.gallerySelected[key],
+        "Selecionar nao marcou miniatura")
+    love.draw()
+    clickStartup("gallery-select")
+    assert(not app.startup.gallerySelecting)
+    assert(not app.startup.gallerySelected[key])
+    print("INKORA_GALLERY_DETAIL_RENAME_DUPLICATE_TRASH_RESTORE_GPU_OK")
     print("INKORA_GPU_SMOKE_OK")
 end
 
