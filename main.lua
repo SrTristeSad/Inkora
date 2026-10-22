@@ -963,6 +963,15 @@ function app:importGalleryIPV(file)
         if self.screen=="editor" then self:statusMessage(message) end
         return false
     end
+    -- Never discard an unsaved painting when dropping a new IPV over
+    -- an active editor. A save failure leaves the existing doc untouched.
+    if self.screen=="editor" and self.doc and
+        (self.doc.dirty or not self.doc.projectKey) then
+        if not self:saveProject(self.doc.name) then
+            self.startup.error="Salve o desenho atual antes de importar IPV."
+            return false
+        end
+    end
     local pngName=file:getFilename():gsub("%.[iI][pP][vV]$",".png")
     local name=pngName:gsub(string.char(92),"/"):
         match("([^/]+)%.%w+$") or "Imagem IPV"
