@@ -323,6 +323,7 @@ function Startup:galleryOpenFolder(id)
     self.gallerySelected={}
     self.galleryMenu=false
     self.newMenu=false
+    self.galleryDrag=nil
     self.notice=nil
     return true
 end
@@ -403,7 +404,7 @@ function Startup:galleryAskMove()
     if self.galleryDetailKey then keys={self.galleryDetailKey} end
     if #keys==0 then return end
     self.galleryMenu=false
-    self.galleryModal={kind="move",keys=keys}
+    self.galleryModal={kind="move",keys=keys,offset=0}
 end
 function Startup:galleryMoveKeys(keys,destination)
     local ok,err=pcall(function()
@@ -882,19 +883,26 @@ function Startup:drawGalleryModal(app,w,h)
             self.fonts.small,G.white)
         local listY=y+76
         local rows=math.min(4,#folders)
+        modal.offset=clamp(modal.offset or 0,0,math.max(0,#folders-rows))
         for i=1,rows do
-            local entry=folders[i]
+            local entry=folders[i+modal.offset]
             local iy=listY+(i-1)*30
             self:label(entry.name,x+30,iy+4,self.fonts.body,G.blue,width-60)
             self:hit(x+18,iy,width-36,28,"move-folder-"..i,
                 function()self:galleryMoveSelected(entry.id)end)
         end
         if #folders>rows then
-            self:label("Mais pastas: use o menu na pasta desejada",
-                x+21,y+218,self.fonts.small,G.muted,width-42)
+            self:label("Anterior",x+20,y+215,self.fonts.small,G.blue)
+            self:hit(x+10,y+202,96,34,"move-prev",function()
+                modal.offset=clamp(modal.offset-4,0,#folders-rows)
+            end)
+            self:label("Proxima",x+width-103,y+215,self.fonts.small,G.blue)
+            self:hit(x+width-113,y+202,100,34,"move-next",function()
+                modal.offset=clamp(modal.offset+4,0,#folders-rows)
+            end)
+        else
+            self:label("Esc: cancelar",x+20,y+215,self.fonts.small,G.muted)
         end
-        self:hit(x,y+229,width,26,"modal-cancel",
-            function()self.galleryModal=nil end)
     elseif modal.kind=="trash" then
         self:label("Mover para a lixeira?",x+22,y+28,
             self.fonts.heading,G.white,width-44)
@@ -1010,6 +1018,12 @@ function Startup:draw(app)
     if app.screen=="home" then self:drawHome(app,w,h)
     elseif app.screen=="gallery" then
         self:drawGallery(app,w,h)
+        if self.galleryDrag and self.galleryDrag.active then
+            local d=self.galleryDrag
+            drawRect(d.x+13,d.y+10,188,32,G.bar,5)
+            self:label(d.entry.name,d.x+21,d.y+17,
+                self.fonts.small,G.white,172)
+        end
         self:drawGalleryModal(app,w,h)
     elseif app.screen=="create" then self:drawCreate(app,w,h)
     end
@@ -1017,6 +1031,84 @@ function Startup:draw(app)
         self:label(self.error,32,h-29,self.fonts.small,C.gold,w-64)
     end
 end
+-- Drag artworks onto folders, onto another artwork to create a group,
+-- or onto Back to send them to the parent folder.
+function Startup:pointerPressed(x,y)
+    if self.galleryModal then return self:click(x,y) end
+    local hit
+    for i=#self.hits,1,-1 do
+        if inside(x,y,self.hits[i]) then hit=self.hits[i];break end
+    end
+    if hit and not self.gallerySelecting and not self.galleryDetailKey and
+       (hit.kind:match("^gallery%-art%-") or
+        hit.kind:match("^gallery%-folder%-")) then
+        local index=tonumber(hit.kind:match("(%d+)$"))
+        local entry=self:galleryEntries()[index]
+        if entry then
+            self.galleryDrag={entry=entry,x=x,y=y,ox=x,oy=y,
+                active=false,action=hit.action}
+            return true
+        end
+    end
+    return self:click(x,y)
+end
+function Startup:pointerMoved(x,y)
+    local d=self.galleryDrag
+    if d then
+        d.x,d.y=x,y
+        if (x-d.ox)^2+(y-d.oy)^2>160 then d.active=true end
+    end
+end
+function Startup:pointerReleased(x,y)
+    local d=self.galleryDrag
+    self.galleryDrag=nil
+    if not d then return end
+    if not d.active then d.action();return end
+    local target
+    for i=#self.hits,1,-1 do
+        if inside(x,y,self.hits[i]) then target=self.hits[i];break end
+    end
+    if not target then return end
+    local kind=target.kind or ""
+    local entry=d.entry
+    if kind=="back-home" and self.galleryFolder~="" then
+        local parent=self.folders:parent(self.galleryFolder)
+        if entry.kind=="art" then
+            self:galleryMoveKeys({entry.key},parent)
+        else
+            local ok,err=pcall(function()
+                self.folders:moveFolder(entry.id,parent)
+            end)
+            self.notice=ok and "Pasta movida para o nivel anterior." or tostring(err)
+        end
+        return
+    end
+    if kind:match("^gallery%-folder%-") then
+        local index=tonumber(kind:match("(%d+)$"))
+        local destination=self:galleryEntries()[index]
+        if destination and destination.kind=="folder" and
+            destination.id~=entry.id then
+            if entry.kind=="art" then
+                self:galleryMoveKeys({entry.key},destination.id)
+            else
+                local ok,err=pcall(function()
+                    self.folders:moveFolder(entry.id,destination.id)
+                end)
+                self.notice=ok and "Subpasta movida." or
+                    ("Nao foi possivel mover: "..tostring(err))
+            end
+        end
+    elseif kind:match("^gallery%-art%-") and entry.kind=="art" then
+        local index=tonumber(kind:match("(%d+)$"))
+        local destination=self:galleryEntries()[index]
+        if destination and destination.kind=="art" and
+            destination.key~=entry.key then
+            self:galleryAskFolder({entry.key,destination.key})
+            self.notice="Escolha o nome da pasta para agrupar as duas obras."
+        end
+    end
+end
+
 function Startup:click(x,y)
     for i=#self.hits,1,-1 do
         local hit=self.hits[i]
