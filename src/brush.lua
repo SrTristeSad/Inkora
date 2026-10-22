@@ -25,6 +25,7 @@ function Brush.segment(canvas, x1, y1, x2, y2, color, diameter, opacity, eraser,
         Native.segment(session,x1,y1,x2,y2,color,diameter,opacity,eraser)
         return
     end
+    Native.invalidate(canvas) -- Prototipo Lua alterou o canvas diretamente.
     local radius = math.max(0.5, diameter/2)
     local distance = math.sqrt((x2-x1)^2 + (y2-y1)^2)
     local steps = math.max(1, math.ceil(distance / math.max(0.75,radius*0.45)))
@@ -63,6 +64,7 @@ local function geometry(kind,x1,y1,x2,y2)
 end
 
 function Brush.shape(canvas,kind,x1,y1,x2,y2,color,diameter,opacity)
+    if canvas then Native.invalidate(canvas) end
     love.graphics.push("all")
     if canvas then love.graphics.setCanvas(canvas) end
     style(color,diameter,opacity,false)

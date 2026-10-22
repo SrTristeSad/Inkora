@@ -1,3 +1,4 @@
+local Native = require("src.native")
 local Document = {}
 Document.__index = Document
 
@@ -25,7 +26,9 @@ local function cloneCanvas(original, w, h)
 end
 
 local function layer(w, h, name)
-    return {canvas = newCanvas(w, h), name = name, opacity = 1, visible = true}
+    local canvas = newCanvas(w, h)
+    Native.registerBlank(canvas)
+    return {canvas = canvas, name = name, opacity = 1, visible = true}
 end
 
 local function cleanText(s)
@@ -135,6 +138,7 @@ function Document:replaceLayerData(index, imageData)
     love.graphics.setColor(1,1,1,1)
     love.graphics.draw(image)
     love.graphics.pop()
+    Native.invalidate(canvas)
     self.layers[index].canvas=canvas
 end
 
@@ -247,6 +251,7 @@ function Document.load(key)
             love.graphics.setBlendMode("alpha", "premultiplied")
             love.graphics.draw(image)
             love.graphics.pop()
+            Native.invalidate(l.canvas)
             l.visible = fields[2] == "1"
             l.opacity = math.max(0, math.min(1, tonumber(fields[3]) or 1))
             table.insert(result.layers, l)
@@ -294,6 +299,7 @@ function Document:importPNG(file)
     love.graphics.setBlendMode("alpha", "alphamultiply")
     love.graphics.draw(image, (self.width - iw * factor)/2, (self.height - ih * factor)/2, 0, factor, factor)
     love.graphics.pop()
+    Native.invalidate(self.layers[self.selected].canvas)
     self.dirty = true
 end
 

@@ -33,7 +33,7 @@
 
 - O motor nativo **nao reutiliza codigo nem assets** do ibisPaint, ReveriePaint ou Klecks. Algoritmos iniciais independentes. Licenca GPL-3.0 do ReveriePaint/Krita e MIT do Klecks devem ser avaliadas antes de copiar/integrar qualquer linha de codigo externo.
 - C++ recebe buffers **RGBA8 straight alpha** e pinta sobre a camada ativa. LuaJIT FFI fornece o ponteiro para a memoria do `ImageData`. O LÖVE e responsavel pelo upload para Canvas GPU. O buffer nunca pode ser realocado enquanto a funcao nativa executa.
-- O C++ v2 retorna dirty rectangles; LuaJIT FFI atualiza somente o retângulo modificado da textura e do Canvas. **Limitação:** ainda existe uma leitura integral do Canvas para ImageData no início de cada traço; regiões distantes em um mesmo segmento geram um retângulo envolvente, não múltiplos tiles. A próxima meta é cache de tiles e atualização segmentada.
+- **Inkora atual:** o núcleo C++ v2 retorna dirty rectangles, e o gerenciador LuaJIT divide as camadas em blocos de 128×128 pixels. Ele lê apenas os blocos necessários, mantém-nos entre traços e envia pequenos recortes modificados para GPU. Blocos de camadas recém-criadas e transparentes começam sem readback. Operações Lua fora do C++ invalidam o cache para preservar o conteúdo. Cada tile recebe o mesmo estado inicial de espaçamento por segmento e o estado global avança uma única vez. **Limites:** CPU ainda não fornece um compositor nativo, pressão física de mesa e medição de latência. O cache não tem limite por quantidade de tiles.
 - API nativa: `inkora_core_api_version() == 1`; `inkora_core_stroke(InkoraStroke*)`; valida tamanho/stride/bytes, finitude e intervalo de coordenadas. Sem chamadores nao confiaveis e sem cache de ponteiros em C++.
 - **Nao foi feita engenharia reversa de codigo proprietario** nem comparacao lado a lado com o ibisPaint instalado; a matriz e um plano baseado em material publico e nos repositorios citados.
 
@@ -50,4 +50,4 @@ Lua / LÖVE: UI, gestos, camadas, documentos
             +--> antigo pincel Lua se DLL nao estiver presente
 ```
 
-**Próximo experimento técnico mensurável:** benchmark de 1280×800 e 4096×4096, histórico de pressões, upload de múltiplos tiles, teste da ponte Windows 64 bits, pressão da mesa digitalizadora com entrada do SO e casos de undo/redo. O LÖVE já recebe o retângulo mínimo envolvente da área marcada como suja e os controles de dureza/espaçamento são expostos na UI.
+**Próximo experimento técnico mensurável:** benchmark e orçamento de memória para 1280×800 e 4096×4096, limite/LRU de tiles, histórico de pressões, teste da ponte Windows 64 bits, pressão real de mesa digitalizadora e undo/redo. O LÖVE já recebe o retângulo mínimo envolvente da área marcada como suja e os controles de dureza/espaçamento são expostos na UI.
