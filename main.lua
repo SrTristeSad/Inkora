@@ -1000,8 +1000,12 @@ function app:importGalleryIPV(file)
                     self.dragging=nil
                     self.rotation=0
                     self:fitView()
+                    local orderMessage=content.layerOrderSource=="layer-list"
+                        and "ordem lida de registro IPV (validacao real pendente)"
+                        or "ordem estimada por ID"
                     self:statusMessage(
-                        ("IPV: %d camadas raster editaveis + referencia oculta; ordem estimada."):format(#rasters))
+                        ("IPV: %d camadas raster editaveis + referencia oculta; %s."):format(
+                            #rasters,orderMessage))
                     return true
                 end
                 layerReason=tostring(err)
