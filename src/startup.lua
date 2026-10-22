@@ -601,6 +601,43 @@ function Startup:galleryTile(project,x,y,thumbW,thumbH,index)
         function()self:galleryOpenDetail(project.key)end)
 end
 
+function Startup:galleryFolderTile(entry,x,y,thumbW,thumbH,index)
+    -- Beige-backed folder tile with a smaller artwork cover, matching
+    -- the clearly recognisable inset folder treatment in official gallery.
+    local light={0.93,0.92,0.85}
+    local outer={0.68,0.68,0.61}
+    drawRect(x-5,y-5,thumbW+10,thumbH+10,light,15)
+    lineRect(x-5,y-5,thumbW+10,thumbH+10,outer,15)
+    drawRect(x+13,y+13,thumbW-26,thumbH-26,G.white,3)
+    local cover
+    for _,project in ipairs(self.projects) do
+        if self.folders:location(project.key)==entry.id then
+            cover=project
+            break
+        end
+    end
+    if cover then
+        local img=self:thumbnail(cover)
+        if img then
+            local iw,ih=img:getDimensions()
+            local scale=math.min((thumbW-31)/iw,(thumbH-31)/ih)
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(img,x+(thumbW-iw*scale)/2,
+                y+(thumbH-ih*scale)/2,0,scale,scale)
+        end
+    else
+        love.graphics.setColor(0.56,0.54,0.42)
+        love.graphics.rectangle("line",x+thumbW*0.25,y+thumbH*0.40,
+            thumbW*0.50,thumbH*0.28,5,5)
+        love.graphics.rectangle("line",x+thumbW*0.25,y+thumbH*0.34,
+            thumbW*0.22,thumbH*0.09,3,3)
+    end
+    self:label(entry.name,x-5,y+thumbH+12,self.fonts.small,G.ink,
+        thumbW+10,"center")
+    self:hit(x-6,y-6,thumbW+12,thumbH+45,"gallery-folder-"..index,
+        function()self:galleryOpenFolder(entry.id)end)
+end
+
 function Startup:drawGallery(app,w,h)
     local headerH=48
     local subH=39
@@ -609,61 +646,68 @@ function Startup:drawGallery(app,w,h)
     drawRect(0,0,w,headerH,G.bar)
     drawRect(0,h-footerH,w,footerH,G.bar)
     -- Real app's gallery is a neutral cream, not our earlier navy dashboard.
-    self:label("Minha Galeria ("..#self.projects..")",0,12,
+    local entries=self:galleryEntries()
+    local title=self.galleryFolder=="" and "Minha Galeria" or
+        self.folders:name(self.galleryFolder)
+    self:label(title.." ("..#entries..")",0,12,
         self.fonts.body,G.white,w,"center")
     love.graphics.setColor(G.blue)
     galleryIcon("back",17,23,11)
     self:label("Voltar",29,13,self.fonts.small,G.blue)
     self:hit(0,0,93,headerH,"back-home",function()
-        if self.galleryDetailKey then
-            self.galleryDetailKey=nil
-        elseif self.gallerySelecting then
-            self:galleryToggleSelection()
-        else app.screen="home" end
-        self.galleryMenu=false
+        self:galleryBack(app)
     end)
+    if self.galleryFolder~="" and not self.galleryDetailKey then
+        self:hit(w*0.35,0,w*0.30,headerH,"rename-folder-title",function()
+            self:galleryAskRenameFolder()
+        end)
+    end
     if not self.galleryDetailKey then
         local text=self.gallerySelecting and "Concluir" or "Selecionar"
         self:label(text,w-109,14,self.fonts.small,G.blue,101,"center")
         self:hit(w-120,0,119,headerH,"gallery-select",
             function()self:galleryToggleSelection()end)
     end
-    local contentTop=headerH+subH
+    local contentTop=headerH
     if not self.galleryDetailKey then
-        drawRect(0,headerH,w,subH,G.white)
-        self:label("Projetos neste dispositivo",15,headerH+12,
-            self.fonts.small,G.ink)
-        self:label(#self.projects.." obras",w-115,headerH+12,
-            self.fonts.small,G.muted,100,"right")
-        if #self.projects==0 then
-            self:label("Ainda nao existem desenhos.",0,
-                math.max(contentTop+80,h*0.44),
+        -- The reference puts artwork immediately under the black title bar.
+        -- Constrain the working grid to three clear, large columns; the old
+        -- six-column card dashboard was visibly different.
+        local centerWidth=math.min(w-34,850)
+        local columns=math.max(1,math.min(3,math.floor(centerWidth/230)))
+        local gap=22
+        local thumbW=clamp(math.floor((centerWidth-(columns-1)*gap)/columns)-24,
+            143,213)
+        local thumbH=math.floor(thumbW*1.18)
+        local cellW=thumbW+25
+        local cellH=thumbH+54
+        local gridWidth=columns*cellW
+        local x0=(w-gridWidth)/2+12
+        local y0=headerH+14
+        local visibleH=h-footerH-y0-12
+        local rows=math.ceil(#entries/columns)
+        self.galleryMaxScroll=math.max(0,rows*cellH-visibleH)
+        self.galleryScroll=clamp(self.galleryScroll,0,self.galleryMaxScroll)
+        if #entries==0 then
+            self:label("Nenhum desenho nesta pasta.",0,
+                math.max(contentTop+95,h*0.44),
                 self.fonts.body,G.muted,w,"center")
-            self:label("Pressione '+' para criar sua primeira obra.",0,
-                math.max(contentTop+111,h*0.44+28),
+            self:label("Toque em + para criar uma pasta ou um desenho.",0,
+                math.max(contentTop+132,h*0.44+32),
                 self.fonts.small,G.muted,w,"center")
         else
-            local thumbW=clamp(math.floor(w*0.15),148,192)
-            local thumbH=clamp(math.floor(thumbW*1.15),172,215)
-            local cellW=thumbW+28
-            local cellH=thumbH+58
-            local margin=25
-            local columns=math.max(1,math.floor((w-2*margin+22)/cellW))
-            local gridWidth=columns*cellW
-            local x0=(w-gridWidth)/2+14
-            local y0=contentTop+26
-            local rows=math.ceil(#self.projects/columns)
-            local visibleH=h-footerH-y0-15
-            self.galleryMaxScroll=math.max(0,rows*cellH-visibleH)
-            self.galleryScroll=clamp(self.galleryScroll,0,self.galleryMaxScroll)
             love.graphics.setScissor(0,contentTop,w,h-footerH-contentTop)
-            for i,project in ipairs(self.projects) do
+            for i,entry in ipairs(entries) do
                 local col=(i-1)%columns
                 local row=math.floor((i-1)/columns)
                 local x=x0+col*cellW
                 local y=y0+row*cellH-self.galleryScroll
                 if y+cellH>contentTop and y<h-footerH then
-                    self:galleryTile(project,x,y,thumbW,thumbH,i)
+                    if entry.kind=="folder" then
+                        self:galleryFolderTile(entry,x,y,thumbW,thumbH,i)
+                    else
+                        self:galleryTile(entry.project,x,y,thumbW,thumbH,i)
+                    end
                 end
             end
             love.graphics.setScissor()
@@ -709,12 +753,16 @@ function Startup:drawGallery(app,w,h)
             n==1 and G.blue or G.muted)
         if n==1 then self:hit(w-253,fy,96,45,"tool-duplicate",
             function()self:galleryDuplicate()end) end
+        self:label("Mover",w-335,fy+14,self.fonts.small,
+            n>0 and G.blue or G.muted)
+        if n>0 then self:hit(w-347,fy,98,45,"tool-move",
+            function()self:galleryAskMove()end) end
         self:label("Lixeira",w-120,fy+14,self.fonts.small,
             n>0 and G.blue or G.muted)
         if n>0 then self:hit(w-131,fy,118,45,"tool-trash",
             function()self:galleryAskTrash()end) end
     else
-        self:galleryTool(10,fy,"plus",function()self:openCreate(app)end)
+        self:galleryTool(10,fy,"plus",function()self:galleryNewMenu()end)
         local active=self:galleryCurrentKey()~=nil
         self:galleryTool(71,fy,"info",function()
             local key=self:galleryCurrentKey()
@@ -732,10 +780,23 @@ function Startup:drawGallery(app,w,h)
                 function()self:galleryEdit(app)end)
         end
     end
+    if self.newMenu and not self.gallerySelecting then
+        local nx=8
+        local ny=h-footerH-100
+        drawRect(nx,ny,234,96,G.bar,5)
+        self:label("Nova pasta",nx+18,ny+12,self.fonts.body,G.white)
+        self:hit(nx,ny,234,45,"new-folder",
+            function()self:galleryAskFolder()end)
+        love.graphics.setColor(G.muted)
+        love.graphics.line(nx+8,ny+47,nx+226,ny+47)
+        self:label("Novo desenho",nx+18,ny+58,self.fonts.body,G.white)
+        self:hit(nx,ny+49,234,45,"open-create",
+            function()self.newMenu=false;self:openCreate(app)end)
+    end
     if self.galleryMenu then
         local mw=206
         local mx=math.min(w-218,248)
-        local my=h-footerH-192
+        local my=h-footerH-#items*44-2
         local items={
             {"Renomear",function()self:galleryRename()end,
                 self:galleryCurrentKey()~=nil},
@@ -743,6 +804,12 @@ function Startup:drawGallery(app,w,h)
                 self:galleryCurrentKey()~=nil},
             {"Mover para lixeira",function()self:galleryAskTrash()end,
                 self:galleryCurrentKey()~=nil},
+            {"Mover para pasta",function()self:galleryAskMove()end,
+                self:galleryCurrentKey()~=nil},
+            {"Renomear pasta",function()self:galleryAskRenameFolder()end,
+                self.galleryFolder~=""},
+            {"Remover pasta vazia",function()self:galleryDeleteEmptyFolder()end,
+                self.galleryFolder~=""},
             {"Restaurar ultima obra",function()self:galleryRestore()end,true},
         }
         drawRect(mx,my,mw,#items*44,G.bar,4)
