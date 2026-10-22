@@ -69,17 +69,58 @@ local function cleanText(s)
     return s:sub(1, 64)
 end
 
+
+-- Metadata snapshots keep immutable references to pixel buffers.
+-- A real raster mutation must call ensureLayerWritable() first.
+-- No deep canvas/mask copy is needed to reorder or toggle layers.
+local function copyLayerDescriptor(l)
+    return {
+        canvas=l.canvas,name=l.name,opacity=l.opacity,visible=l.visible,
+        blendMode=l.blendMode or 0,alphaLock=l.alphaLock or false,
+        clipping=l.clipping or false,mask=l.mask,
+    }
+end
+
 local function createSnapshot(self)
-    local snap = {layers = {}, selected = self.selected}
-    for i, l in ipairs(self.layers) do
-        snap.layers[i] = {
-            canvas = cloneCanvas(l.canvas, self.width, self.height),
-            name = l.name, opacity = l.opacity, visible = l.visible,
-            blendMode = l.blendMode or 0, alphaLock=l.alphaLock or false,
-            clipping=l.clipping or false, mask=cloneMask(l.mask),
-        }
+    local snap={layers={},selected=self.selected}
+    for i,l in ipairs(self.layers) do
+        snap.layers[i]=copyLayerDescriptor(l)
     end
     return snap
+end
+
+local function snapshotUsesResource(self,value,property)
+    if not value then return false end
+    for _,stack in ipairs({self.history,self.future}) do
+        for _,entry in ipairs(stack) do
+            if entry.layers then
+                for _,layer in ipairs(entry.layers) do
+                    if layer[property]==value then return true end
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Copy on first write only when an old snapshot owns the same pixels.
+function Document:ensureLayerWritable(index)
+    local current=self.layers[index]
+    if not current then return false end
+    if snapshotUsesResource(self,current.canvas,"canvas") then
+        current.canvas=cloneCanvas(current.canvas,self.width,self.height)
+        -- The fresh Canvas contains existing pixels, not an empty layer.
+        Native.invalidate(current.canvas)
+    end
+    return true
+end
+
+local function ensureMaskWritable(self,index)
+    local current=self.layers[index]
+    if current and current.mask and
+       snapshotUsesResource(self,current.mask,"mask") then
+        current.mask=cloneMask(current.mask)
+    end
 end
 
 function Document.new(w, h, name)
@@ -189,6 +230,8 @@ function Document:captureStrokeRegion(x0,y0,x1,y1,diameter,scatter)
 end
 
 local function swapStrokeTiles(self,entry)
+    -- Undo/redo may edit pixels shared by an earlier structural snapshot.
+    self:ensureLayerWritable(entry.layerIndex)
     local target=self.layers[entry.layerIndex]
     assert(target and target.canvas,"Camada do historico inexistente")
     local canvas=target.canvas
@@ -216,7 +259,17 @@ local function swapStrokeTiles(self,entry)
 end
 
 function Document:historyStats()
+    -- Count each stored RGBA resource at most once, and exclude buffers
+    -- already owned by the live document. This is an approximate logical
+    -- history cost, not physical VRAM usage or allocator overhead.
     local tiles,strokeCount,fullCount,bytes=0,0,0,0
+    local owned={}
+    for _,layer in ipairs(self.layers) do
+        owned[layer.canvas]=true
+        if layer.mask then owned[layer.mask]=true end
+    end
+    local seen={}
+    local unique=0
     for _,stack in ipairs({self.history,self.future}) do
         for _,entry in ipairs(stack) do
             if entry.kind=="stroke" then
@@ -225,16 +278,23 @@ function Document:historyStats()
                 bytes=bytes+entry.bytes
             else
                 fullCount=fullCount+1
-                for _,l in ipairs(entry.layers) do
-                    bytes=bytes+self.width*self.height*4
-                    if l.mask then bytes=bytes+self.width*self.height*4 end
+                for _,layer in ipairs(entry.layers) do
+                    for _,resource in ipairs({layer.canvas,layer.mask or false}) do
+                        if resource and not seen[resource] then
+                            seen[resource]=true
+                            if not owned[resource] then
+                                bytes=bytes+self.width*self.height*4
+                                unique=unique+1
+                            end
+                        end
+                    end
                 end
             end
         end
     end
     return {steps=#self.history,redo=#self.future,
         strokeCount=strokeCount,fullCount=fullCount,
-        tiles=tiles,bytes=bytes}
+        tiles=tiles,bytes=bytes,uniqueBuffers=unique}
 end
 
 function Document:checkpoint(preserveComposite)
@@ -368,8 +428,9 @@ function Document:invertLayerMask(index)
     local layer=self.layers[index]
     if not layer or not layer.mask then return false end
     self:checkpoint()
-    -- Invert actual coverage. The mask is owned by the active layer,
-    -- and undo snapshots have an independent ImageData copy.
+
+    -- The mask may be shared by a structural snapshot. Detach first.
+    ensureMaskWritable(self,index)
     layer.mask:mapPixel(function(x,y,r,g,b,a)
         return 1-r,1-g,1-b,a
     end)

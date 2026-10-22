@@ -62,7 +62,8 @@
 - [x] Teste de comparação contra a implementação C++ integral anterior em 768×640 com máscara, clipping, Screen e borda 512.
 - [x] Histórico de pincel/borracha por tiles de 128×128 com captura única por bloco, swap em desfazer/refazer, invalidação do cache nativo e preservação dos snapshots estruturais.
 - [x] Indicador visível de passos e MiB RGBA estimados no cabeçalho e testes GPU de histórico misto, transparência e costuras de tiles.
-- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, snapshots estruturais menores e renderização incremental progressiva.
+- [x] Snapshots de camadas estruturais por referências imutáveis e cópia sob escrita de Canvas/máscara, incluindo restauração de histórico misto e estimativa de memória sem duplicar buffers compartilhados.
+- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, política de memória do histórico e renderização incremental progressiva.
 - [ ] Seleção com laço, varinha, elipse, feathering e suporte nas ferramentas de formas.
 - [ ] Selecao e transformacoes: laço, varinha, mover, redimensionar, rotacionar (retângulo básico já implementado).
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.

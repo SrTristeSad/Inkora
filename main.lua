@@ -277,6 +277,9 @@ function app:strokeStart(x,y,pressure)
         return
     end
     self.doc:beginStrokeHistory()
+    -- Metadata history may share an older version of this layer's canvas.
+    -- Detach on actual pixel editing, not on property-only edits.
+    self.doc:ensureLayerWritable(self.doc.selected)
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
         tip=self.brushTip,aspect=0.3,
@@ -394,6 +397,7 @@ function app:shapeEnd(x,y)
     if not d or d.kind~="shape" then return end
     d.x2,d.y2=self:screenToDocument(x,y)
     self.doc:checkpoint()
+    self.doc:ensureLayerWritable(self.doc.selected)
     Brush.shape(self.doc.layers[self.doc.selected].canvas,d.shape,
         d.x1,d.y1,d.x2,d.y2,self.color,self.brushSize,self.brushOpacity)
 end

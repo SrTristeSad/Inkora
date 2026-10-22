@@ -526,6 +526,64 @@ local function run(app)
         undoDoc:beginStrokeHistory()
         assert(undoDoc:historyStats().redo==0,
             "Nova pincelada nao limpou historico de refazer")
+        -- Structural history must share unchanged canvases/masks,
+        -- detaching only on later pixel edits (copy-on-write).
+        local cow=Doc.new(384,384,"Historico estrutural COW")
+        local original=cow.layers[1].canvas
+        local firstInk=Brush.beginStroke(original)
+        Brush.segment(original,84.5,82.5,84.5,82.5,
+            {0.94,0.12,0.08},24,1,false,firstInk)
+        local oldR,oldG,oldB=original:newImageData(1,1,84,82,1,1):getPixel(0,0)
+        cow:toggleLayer(1)
+        cow:toggleLayer(1)
+        assert(#cow.history==2 and
+            cow.history[1].layers[1].canvas==original and
+            cow.history[2].layers[1].canvas==original,
+            "Snapshot de visibilidade duplicou camadas indevidamente")
+        assert(cow:historyStats().bytes==0,
+            "Mudancas puramente estruturais nao deveriam copiar pixels")
+        cow:beginStrokeHistory()
+        assert(cow:ensureLayerWritable(1))
+        local detached=cow.layers[1].canvas
+        assert(detached~=original and
+            cow.history[2].layers[1].canvas==original,
+            "Primeiro pixel modificado nao separou a imagem compartilhada")
+        cow:captureStrokeRegion(84.5,82.5,84.5,82.5,24,0)
+        local secondInk=Brush.beginStroke(detached)
+        Brush.segment(detached,84.5,82.5,84.5,82.5,
+            {0.03,0.09,0.99},24,1,false,secondInk)
+        local nR,nG,nB=detached:newImageData(1,1,84,82,1,1):getPixel(0,0)
+        assert(nB>nR and nB>nG,
+            "Pincel apos copy-on-write nao atualizou a tela")
+        local sameR,sameG,sameB=original:newImageData(1,1,84,82,1,1):getPixel(0,0)
+        assert(math.abs(sameR-oldR)<0.005 and
+            math.abs(sameG-oldG)<0.005 and
+            math.abs(sameB-oldB)<0.005,
+            "Edição sobrescreveu o canvas guardado no snapshot")
+        assert(cow:historyStats().strokeCount==1 and
+            cow:historyStats().fullCount==2)
+        assert(cow:undo() and cow:undo() and cow:undo())
+        assert(cow.layers[1].visible==true and cow.layers[1].canvas==original)
+        local undoR=cow.layers[1].canvas:newImageData(1,1,84,82,1,1):getPixel(0,0)
+        assert(math.abs(undoR-oldR)<0.005)
+        assert(cow:redo() and cow:redo() and cow:redo())
+        local doneR,doneG,doneB=cow.layers[1].canvas:
+            newImageData(1,1,84,82,1,1):getPixel(0,0)
+        assert(doneB>doneR and doneB>doneG,
+            "Redo misto estrutural/brush nao recuperou pintura")
+        assert(cow:setSelection(60,60,120,120))
+        assert(cow:createLayerMask(1))
+        local previousMask=cow.layers[1].mask
+        local mr=previousMask:getPixel(20,20)
+        assert(cow:invertLayerMask(1))
+        assert(cow.layers[1].mask~=previousMask and
+            cow.layers[1].mask:getPixel(20,20)>0.9 and mr<0.1,
+            "Inversao de mascara alterou o buffer de historico compartilhado")
+        assert(cow:undo() and cow.layers[1].mask==previousMask,
+            "Undo nao recuperou a mascara intacta")
+        assert(cow:redo() and cow.layers[1].mask~=previousMask,
+            "Redo nao recuperou a mascara invertida")
+        print("INKORA_STRUCTURAL_COPY_ON_WRITE_GPU_OK")
         print("INKORA_REGIONAL_BRUSH_UNDO_REDO_GPU_OK")
         print("INKORA_BOUNDED_INITIAL_COMPOSITOR_GPU_OK")
         print("INKORA_PARTIAL_COMPOSITOR_MASK_CLIP_GPU_OK")
