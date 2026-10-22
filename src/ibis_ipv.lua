@@ -158,6 +158,9 @@ function IPV.inspect(data)
     local layerSnapshots=0
     local unrecognizedLayers=false
     local layerSet=nil
+    local layerListRecords=0
+    local textRecords=0
+    local recordTypes={}
     while pos<=#data do
         count=count+1
         assert(count<=MAX_RECORDS,"IPV: registros demais")
@@ -171,6 +174,11 @@ function IPV.inspect(data)
         assert(u32(data,footer)==(U32-(length+8))%U32,
             "IPV: sentinela invalida")
         local payload=pos+8
+        local typeKey=string.format("%04X/%04X",major,sub)
+        recordTypes[typeKey]=(recordTypes[typeKey] or 0)+1
+        if major==0x0100 and sub==0x0900 then
+            textRecords=textRecords+1
+        end
         if major==0x0100 and sub==0x0100 then
             assert(length>=16,"IPV: cabecalho de canvas truncado")
             local w,h=u32(data,payload+8),u32(data,payload+12)
@@ -179,6 +187,7 @@ function IPV.inspect(data)
             width,height=w,h
             sawHeader=true
         elseif major==0x0300 and sub==0x0600 then
+            layerListRecords=layerListRecords+1
             -- Only the latest layer-set operation describes the final order.
             layerSet=readLayerSetAfter(data,payload,length)
         elseif major==0x0100 and sub==0x0500 then
@@ -247,6 +256,8 @@ function IPV.inspect(data)
         rasterLayers=layers,layerSnapshots=layerSnapshots,
         incompleteRaster=unrecognizedLayers,
         layerOrderSource=layerSet and "layer-list" or "id-estimate",
+        recordTypes=recordTypes, textRecords=textRecords,
+        layerListRecords=layerListRecords,
     }
 end
 

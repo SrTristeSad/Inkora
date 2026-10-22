@@ -39,3 +39,23 @@ O formato é analisado para interoperabilidade. Os nomes, ícones, pincéis, gr�
 ### Leitura conservadora de ordem — experimento 22/10/2026
 
 O parser reconhece grupos encadeados `0300/0603` terminados por ID `-1` na ultima operacao `0300/0600`. Utiliza somente o segundo grupo (IDs apos a operacao) quando integro: IDs antigos excluidos deixam de aparecer na importacao, e snapshots inexistentes para IDs ainda ativos provocam fallback achatado. Metadados desconhecidos mantem o comportamento anterior de ordenacao por ID. O aviso do editor identifica a origem da ordem. Os testes sao **sinteticos**: ainda nao comprovam ordenacao visual equivalente ao ibisPaint Windows 14.1.2, propriedades de camada ou importacao de arquivos reais. A implementacao e independente da base MIT.
+
+### Auditoria de fixture publica real (Android 14.0.11)
+
+A pipeline foi ampliada para **baixar temporariamente** a fixture publica
+[general-30-text-layers.ipv](https://github.com/fapotaa/ipv-format/blob/main/templates/general-30-text-layers.ipv),
+fixada no commit `a5bded915994dbbf972b549eafe02c6a64c94731` e verificada pelo Git blob SHA
+`d3dc6f83d90f59a3b145967a18d6c6aaabf8356a`, sem adiciona-la a este repositorio.
+O tamanho do canvas documentado e de **720 x 16000** pixels. O script
+`tests/ipv_real_fixture.lua` valida a leitura do container real (cabecalho,
+dimensoes, snapshots e registros de texto), e
+`tools/inspect_ipv.lua` produz um relatorio de metadados, sem extrair desenhos
+nem executar codigo da origem. O workflow publica apenas `ipv-audit.txt`.
+
+Esta verificacao **nao comprova** fidelidade visual de camadas nem importacao
+editavel de um canvas de 16000 pixels: o Inkora limita atualmente documentos
+editaveis a 4096 x 4096. Tambem nao valida ibisPaint Windows 14.1.2.
+
+Para auditar um arquivo IPV local com Lua 5.1, executar na raiz do projeto:
+`lua tools/inspect_ipv.lua "caminho/para/obra.ipv"`.
+A ferramenta preserva o arquivo original e nao exibe conteudo dos textos.

@@ -176,3 +176,19 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 Este ainda é um MVP, não um motor profissional: existe apenas uma ponte WinTab experimental ainda não verificada em mesa física Windows; não há suporte Windows Ink comprovado, filtros profissionais, estabilizador completo, formatos PSD/KRA, biblioteca ampla de pincéis nem aceleração otimizada para telas enormes. A seleção retangular básica existe, mas ainda não possui laço ou varinha. O balde de tinta processa apenas a camada atual na CPU e pode demorar em imagens grandes. O histórico de pincel/borracha usa tiles; operações estruturais compartilham buffers até uma nova edição real, mas imagens substituídas, máscaras e edições grandes ainda podem custar muita memória. A interface desktop será adaptada futuramente para Android. É necessário testar a execução real no LÖVE e o desempenho em diferentes GPUs.
 
 **Desenvolvimento:** projeto independente de pintura digital. Nome e identidade próprios; sem associação oficial ao ibisPaint.
+
+
+### Diagnostico de documentos ibisPaint sem decompilar o aplicativo
+
+Para inspecionar um `.ipv` com Lua 5.1 sem modifica-lo:
+
+```sh
+lua tools/inspect_ipv.lua "caminho/para/obra.ipv"
+```
+
+O comando lista dimensoes, tipos de registro, numero de snapshots de camadas,
+registros de texto e origem da ordem. Nao mostra o conteudo privado de textos.
+A pipeline CI baixa temporariamente uma amostra publica real do ibisPaint X Android,
+confere sua identidade pelo hash Git e testa somente a leitura dos metadados;
+nao incorpora o arquivo binario ao projeto. Isso nao representa compatibilidade
+comprovada com documentos da versao Windows.
