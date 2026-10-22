@@ -108,6 +108,39 @@ local HOME_BLUE={0.146,0.278,0.435}
 local HOME_DARK={0.085,0.174,0.281}
 local HOME_OUTLINE={0.83,0.89,0.96}
 
+-- Outline pencil for the My Gallery shortcut. Its shaft, eraser ferrule,
+-- and sharpened graphite tip are separate, connected shapes. The previous
+-- icon was a diagonal line with a square/circle and looked like an arrow.
+-- Draw in local coordinates to keep a clean 45-degree pencil at any DPI.
+-- Original Lua vector geometry; no third-party art or proprietary bitmap.
+local function drawGalleryPencil(cx,cy,radius)
+    local u=radius*0.64
+    love.graphics.push("all")
+    love.graphics.translate(cx,cy)
+    love.graphics.rotate(-math.pi/4)
+    love.graphics.setColor(HOME_OUTLINE)
+    love.graphics.setLineStyle("smooth")
+    love.graphics.setLineJoin("round")
+    love.graphics.setLineWidth(math.max(2,radius*0.029))
+
+    -- Main body. The division near the rear forms the pencil's eraser band.
+    love.graphics.rectangle("line",-u*0.83,-u*0.19,
+        u*1.36,u*0.38,u*0.09,u*0.09)
+    love.graphics.line(-u*0.61,-u*0.19,-u*0.61,u*0.19)
+    love.graphics.line(-u*0.48,u*0.08,u*0.39,u*0.08)
+
+    -- The two shoulders lead into a deliberately tapered lead point.
+    love.graphics.polygon("line",
+        u*0.53,-u*0.19,
+        u*0.96,0,
+        u*0.53,u*0.19)
+    love.graphics.line(u*0.75,-u*0.095,
+        u*0.93,0,
+        u*0.75,u*0.095)
+
+    love.graphics.pop()
+end
+
 function Startup:drawHome(app,w,h)
     -- The previous three large cards were not the reference's title layout.
     -- Scale the two navigation targets while preserving a predictable ratio.
@@ -154,17 +187,7 @@ function Startup:drawHome(app,w,h)
             love.graphics.line(x-g*0.87,y-g*0.44,x+g*0.87,y-g*0.44)
             love.graphics.line(x-g*0.87,y+g*0.44,x+g*0.87,y+g*0.44)
         else
-            -- Original Inkora outline brush, not the ibisPaint icon asset.
-            love.graphics.setColor(HOME_OUTLINE)
-            love.graphics.setLineWidth(3)
-            love.graphics.line(x-g*0.4,y+g*0.45,x+g*0.68,y-g*0.65)
-            love.graphics.setLineWidth(1.7)
-            love.graphics.polygon("line",
-                x+g*0.51,y-g*0.80,
-                x+g*0.82,y-g*0.53,
-                x+g*0.60,y-g*0.31,
-                x+g*0.30,y-g*0.58)
-            love.graphics.circle("line",x-g*0.52,y+g*0.62,g*0.21)
+            drawGalleryPencil(x,y,radius)
         end
         self:label(item.label,x-radius-65,y+radius+14,
             self.fonts.body,C.light,(radius+65)*2,"center")
