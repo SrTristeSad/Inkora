@@ -276,7 +276,7 @@ function app:strokeStart(x,y,pressure)
         self:statusMessage("Selecao e Alpha Lock exigem o motor C++ v6.")
         return
     end
-    self.doc:checkpoint(true)
+    self.doc:beginStrokeHistory()
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
         tip=self.brushTip,aspect=0.3,
@@ -297,6 +297,8 @@ function app:strokeStart(x,y,pressure)
         lastTick=love.timer.getTime(),
         targetX=dx,targetY=dy,
     }
+    self.doc:captureStrokeRegion(dx,dy,dx,dy,
+        self.brushSize,self.brushScatter)
     Brush.segment(layer.canvas,dx,dy,dx,dy,self.color,self.brushSize,
         self.brushOpacity,self.tool=="eraser",self.dragging.nativeStroke,
         self.dragging.pressure,self.dragging.pressure)
@@ -314,6 +316,8 @@ function app:strokeMove(x,y,pressure,dt)
     local dx,dy=drag.smoother:push(targetX,targetY,elapsed)
     local layer=self.doc.layers[self.doc.selected]
     local nextPressure=pressure or 1
+    self.doc:captureStrokeRegion(drag.x,drag.y,dx,dy,
+        self.brushSize,self.brushScatter)
     Brush.segment(layer.canvas,drag.x,drag.y,dx,dy,self.color,
         self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke,
         drag.pressure,nextPressure)
@@ -332,6 +336,8 @@ function app:strokeEnd(x,y,pressure)
     for i,point in ipairs(tail) do
         local t=i/#tail
         local samplePressure=drag.pressure+(finalPressure-drag.pressure)*t
+        self.doc:captureStrokeRegion(drag.x,drag.y,point[1],point[2],
+            self.brushSize,self.brushScatter)
         Brush.segment(canvas,drag.x,drag.y,point[1],point[2],
             self.color,self.brushSize,self.brushOpacity,
             self.tool=="eraser",drag.nativeStroke,drag.pressure,samplePressure)

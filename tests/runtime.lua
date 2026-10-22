@@ -465,6 +465,68 @@ local function run(app)
             large:compositorStats().fullBuilds==2 and
             large:compositorStats().lastBatches==4,
             "Mudanca estrutural nao regenerou tiles sem buffer completo")
+        -- Brush undo history captures only tiles intersected by the
+        -- actual stroke (including eraser / alpha at block boundaries).
+        local undoDoc=Doc.new(384,256,"Historico regional de pincel")
+        local layerCanvas=undoDoc.layers[1].canvas
+        local saveBefore=layerCanvas:newImageData()
+        assert(undoDoc:beginStrokeHistory())
+        local drawStroke=Brush.beginStroke(layerCanvas,{
+            tip=0,hardness=1,spacing=0.12,flow=1
+        })
+        assert(undoDoc:captureStrokeRegion(95.5,125.5,95.5,125.5,20,0))
+        Brush.segment(layerCanvas,95.5,125.5,95.5,125.5,
+            {0.98,0.14,0.18},20,1,false,drawStroke)
+        assert(undoDoc:captureStrokeRegion(95.5,125.5,276.5,125.5,20,0))
+        Brush.segment(layerCanvas,95.5,125.5,276.5,125.5,
+            {0.98,0.14,0.18},20,1,false,drawStroke)
+        local memory=undoDoc:historyStats()
+        assert(memory.steps==1 and memory.strokeCount==1
+            and memory.fullCount==0 and memory.tiles==6,
+            "Uma pincelada cruzando tiles deve salvar 6 tiles apenas")
+        assert(memory.bytes==6*128*128*4 and
+            memory.bytes<384*256*4,
+            "Historico de pincel salvou mais que uma camada inteira")
+        local saveAfter=layerCanvas:newImageData()
+        assert(undoDoc:undo(),"Desfazer regionais falhou")
+        for _,coord in ipairs({
+            {100,124},{126,125},{129,125},{257,124},{275,125},
+            {50,50},{300,200}
+        }) do
+            local x,y=coord[1],coord[2]
+            for channel=1,4 do
+                local before={saveBefore:getPixel(x,y)}
+                local undone={undoDoc.layers[1].canvas:newImageData(1,1,x,y,1,1):getPixel(0,0)}
+                assert(math.abs(undone[channel]-before[channel])<0.005,
+                    "Undo regional nao restaurou pixel original")
+            end
+        end
+        assert(undoDoc:historyStats().redo==1 and
+            undoDoc:historyStats().fullCount==0)
+        assert(undoDoc:redo(),"Refazer regional falhou")
+        local redoImage=undoDoc.layers[1].canvas:newImageData()
+        for y=0,255,13 do for x=0,383,11 do
+            local a,b,c,d=redoImage:getPixel(x,y)
+            local e,f,g,h=saveAfter:getPixel(x,y)
+            assert(math.abs(a-e)<0.005 and math.abs(b-f)<0.005
+                and math.abs(c-g)<0.005 and math.abs(d-h)<0.005,
+                ("Refazer regional divergiu em %d,%d"):format(x,y))
+        end end
+        -- Structural operation still uses old full snapshot and mixes with
+        -- regional records in both directions of the history stack.
+        assert(undoDoc:addLayer("Camada adicional"))
+        assert(undoDoc:historyStats().fullCount==1)
+        assert(undoDoc:undo() and #undoDoc.layers==1)
+        assert(undoDoc:undo())
+        assert(undoDoc:redo() and undoDoc:redo())
+        assert(#undoDoc.layers==2 and
+            undoDoc.layers[1].canvas:newImageData(1,1,200,125,1,1):getPixel(0,0)>0.5,
+            "Historico misto de tinta/camada divergiu")
+        assert(undoDoc:undo())
+        undoDoc:beginStrokeHistory()
+        assert(undoDoc:historyStats().redo==0,
+            "Nova pincelada nao limpou historico de refazer")
+        print("INKORA_REGIONAL_BRUSH_UNDO_REDO_GPU_OK")
         print("INKORA_BOUNDED_INITIAL_COMPOSITOR_GPU_OK")
         print("INKORA_PARTIAL_COMPOSITOR_MASK_CLIP_GPU_OK")
     end

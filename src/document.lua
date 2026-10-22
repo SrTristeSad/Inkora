@@ -135,6 +135,108 @@ end
 
 -- The history snapshot does not change visible pixels by itself. Brush
 -- strokes can defer invalidation until their actual dirty upload is known.
+-- Brush history is copy-on-write at 128x128 tile granularity. The first
+-- time a tile is touched by one stroke, save only that tile's RGBA bytes.
+-- Structural edits intentionally keep their existing whole-layer snapshots.
+local function tileBounds(doc,tx,ty)
+    local x,y=tx*COMPOSITE_TILE,ty*COMPOSITE_TILE
+    return x,y,math.min(COMPOSITE_TILE,doc.width-x),
+        math.min(COMPOSITE_TILE,doc.height-y)
+end
+
+local function captureTile(canvas,x,y,w,h)
+    return canvas:newImageData(1,1,x,y,w,h)
+end
+
+function Document:beginStrokeHistory()
+    local entry={kind="stroke",layerIndex=self.selected,tiles={},
+        tileKeys={},bytes=0}
+    table.insert(self.history,entry)
+    if #self.history>MAX_HISTORY then table.remove(self.history,1) end
+    self.future={}
+    self.dirty=true
+    return entry
+end
+
+function Document:captureStrokeRegion(x0,y0,x1,y1,diameter,scatter)
+    local entry=self.history[#self.history]
+    if not entry or entry.kind~="stroke" or
+        entry.layerIndex~=self.selected then return false end
+    local radius=math.max(0.5,diameter*0.5)+
+        diameter*0.4*(scatter or 0)+4
+    local left=math.max(0,math.floor(math.min(x0,x1)-radius))
+    local top=math.max(0,math.floor(math.min(y0,y1)-radius))
+    local right=math.min(self.width-1,math.ceil(math.max(x0,x1)+radius))
+    local bottom=math.min(self.height-1,math.ceil(math.max(y0,y1)+radius))
+    if right<left or bottom<top then return false end
+    local canvas=self.layers[entry.layerIndex].canvas
+    local tilesWide=math.ceil(self.width/COMPOSITE_TILE)
+    for ty=math.floor(top/COMPOSITE_TILE),math.floor(bottom/COMPOSITE_TILE) do
+        for tx=math.floor(left/COMPOSITE_TILE),math.floor(right/COMPOSITE_TILE) do
+            local key=ty*tilesWide+tx
+            if not entry.tileKeys[key] then
+                local x,y,w,h=tileBounds(self,tx,ty)
+                entry.tiles[#entry.tiles+1]={
+                    x=x,y=y,w=w,h=h,
+                    data=captureTile(canvas,x,y,w,h)
+                }
+                entry.tileKeys[key]=true
+                entry.bytes=entry.bytes+w*h*4
+            end
+        end
+    end
+    return true
+end
+
+local function swapStrokeTiles(self,entry)
+    local target=self.layers[entry.layerIndex]
+    assert(target and target.canvas,"Camada do historico inexistente")
+    local canvas=target.canvas
+    local replacement={}
+    -- Read all current tiles before writing any replacement pixels.
+    for i,tile in ipairs(entry.tiles) do
+        replacement[i]={
+            x=tile.x,y=tile.y,w=tile.w,h=tile.h,
+            data=captureTile(canvas,tile.x,tile.y,tile.w,tile.h)
+        }
+    end
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.setBlendMode("replace","premultiplied")
+    love.graphics.setColor(1,1,1,1)
+    for _,tile in ipairs(entry.tiles) do
+        local image=love.graphics.newImage(tile.data)
+        love.graphics.draw(image,tile.x,tile.y)
+        image:release()
+    end
+    love.graphics.pop()
+    Native.invalidate(canvas)
+    return {kind="stroke",layerIndex=entry.layerIndex,
+        tiles=replacement,bytes=entry.bytes}
+end
+
+function Document:historyStats()
+    local tiles,strokeCount,fullCount,bytes=0,0,0,0
+    for _,stack in ipairs({self.history,self.future}) do
+        for _,entry in ipairs(stack) do
+            if entry.kind=="stroke" then
+                strokeCount=strokeCount+1
+                tiles=tiles+#entry.tiles
+                bytes=bytes+entry.bytes
+            else
+                fullCount=fullCount+1
+                for _,l in ipairs(entry.layers) do
+                    bytes=bytes+self.width*self.height*4
+                    if l.mask then bytes=bytes+self.width*self.height*4 end
+                end
+            end
+        end
+    end
+    return {steps=#self.history,redo=#self.future,
+        strokeCount=strokeCount,fullCount=fullCount,
+        tiles=tiles,bytes=bytes}
+end
+
 function Document:checkpoint(preserveComposite)
     if not preserveComposite then self:markCompositeDirty() end
     table.insert(self.history, createSnapshot(self))
@@ -144,22 +246,32 @@ function Document:checkpoint(preserveComposite)
 end
 
 function Document:undo()
-    if #self.history == 0 then return false end
-    table.insert(self.future, createSnapshot(self))
-    local snap = table.remove(self.history)
-    self.layers, self.selected = snap.layers, snap.selected
+    if #self.history==0 then return false end
+    local previous=table.remove(self.history)
+    if previous.kind=="stroke" then
+        table.insert(self.future,swapStrokeTiles(self,previous))
+        self.selected=previous.layerIndex
+    else
+        table.insert(self.future,createSnapshot(self))
+        self.layers,self.selected=previous.layers,previous.selected
+    end
     self:markCompositeDirty()
-    self.dirty = true
+    self.dirty=true
     return true
 end
 
 function Document:redo()
-    if #self.future == 0 then return false end
-    table.insert(self.history, createSnapshot(self))
-    local snap = table.remove(self.future)
-    self.layers, self.selected = snap.layers, snap.selected
+    if #self.future==0 then return false end
+    local nextEntry=table.remove(self.future)
+    if nextEntry.kind=="stroke" then
+        table.insert(self.history,swapStrokeTiles(self,nextEntry))
+        self.selected=nextEntry.layerIndex
+    else
+        table.insert(self.history,createSnapshot(self))
+        self.layers,self.selected=nextEntry.layers,nextEntry.selected
+    end
     self:markCompositeDirty()
-    self.dirty = true
+    self.dirty=true
     return true
 end
 
