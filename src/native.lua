@@ -181,7 +181,7 @@ end
 
 local function union(a,b)
     if not a then return b end
-    local x=math.min(a.x,b.x),y=math.min(a.y,b.y)
+    local x,y=math.min(a.x,b.x),math.min(a.y,b.y)
     local right=math.max(a.x+a.width,b.x+b.width)
     local bottom=math.max(a.y+a.height,b.y+b.height)
     return {x=x,y=y,width=right-x,height=bottom-y}
