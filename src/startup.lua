@@ -13,7 +13,7 @@ local C={
     stroke={0.24,0.32,0.42},white={1,1,1},
 }
 local PRESETS={
-    {name="SD (Rapido)",w=1024,h=768,detail="SD"},
+    {name="SD (Velocidade)",w=621,h=1344,detail="SD"},
     {name="1:1 (SD)",w=1280,h=1280,detail="1:1"},
     {name="3:4 (SD)",w=768,h=1024,detail="3:4"},
     {name="9:16 (SD)",w=720,h=1280,detail="9:16"},
@@ -950,7 +950,7 @@ function Startup:drawNewDialog(app,w,h)
     end
     local function slider(field,sy)
         local left=px+117
-        local right=px+panelW-75
+        local right=px+panelW-97
         self:label(field=="width" and "L" or "A",px+82,sy-3,
             self.fonts.body,G.ink)
         love.graphics.setColor(G.ink)
@@ -1043,8 +1043,12 @@ function Startup:drawNewDialog(app,w,h)
     end
     love.graphics.setScissor()
     -- Custom dimensions are committed by OK; presets work on one tap.
-    self:label("OK",px+panelW-35,py+199,self.fonts.body,G.ink)
-    self:hit(px+panelW-44,py+192,43,30,"create-artwork",function()
+    -- Black pill like the dedicated 'OK' target in the reference dialog.
+    love.graphics.setColor(G.bar)
+    love.graphics.circle("fill",px+panelW-21,py+205,16)
+    self:label("OK",px+panelW-38,py+198,self.fonts.small,G.white,
+        34,"center")
+    self:hit(px+panelW-41,py+184,40,42,"create-artwork",function()
         if self:submit(app) then self.galleryModal=nil end
     end)
     if self.error then
@@ -1421,7 +1425,7 @@ function Startup:setNewSliderValue(kind,x)
         return
     end
     if kind~="width" and kind~="height" then return end
-    start,finish=px+117,px+panelW-75
+    start,finish=px+117,px+panelW-97
     local fraction=clamp((x-start)/(finish-start),0,1)
     local value=math.floor(64+4032*fraction+0.5)
     self.draft[kind]=tostring(value)
