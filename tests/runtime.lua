@@ -1555,6 +1555,21 @@ local function run(app)
     assert(math.abs(portraitPreview:getWidth()/
         portraitPreview:getHeight()-400/550)<0.015,
         "Proporcao da miniatura vertical diverge da obra")
+    -- Upgrade an existing user's old postcard preview transparently, while
+    -- retaining the original painted layers / native project file.
+    local legacyCanvas=love.graphics.newCanvas(320,208,{format="rgba8"})
+    local legacyPNG=legacyCanvas:newImageData():encode("png"):getString()
+    assert(love.filesystem.write(
+        "projects/"..previewDoc.projectKey.."/preview.png",legacyPNG))
+    app.startup:refreshGallery()
+    local legacyEntry=app.startup:galleryProject(previewDoc.projectKey)
+    local migrated=app.startup:thumbnail(legacyEntry)
+    assert(migrated and migrated:getHeight()>migrated:getWidth(),
+        "Miniatura antiga nao foi atualizada automaticamente")
+    local preserved=savedDoc.load(previewDoc.projectKey)
+    assert(preserved.width==400 and preserved.height==550,
+        "Atualizar preview alterou o projeto original")
+    print("INKORA_LEGACY_GALLERY_PREVIEW_MIGRATION_GPU_OK")
     print("INKORA_ASPECT_CORRECT_GALLERY_PREVIEWS_GPU_OK")
     print("INKORA_GALLERY_PNG_IMPORT_NATIVE_DOCUMENT_OK")
 
