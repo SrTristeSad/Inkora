@@ -106,7 +106,7 @@ function Startup:drawHome(app,w,h)
     self:label("inkora",cx-240,h*0.37,self.fonts.logo,C.light,480,"center")
     self:label("Crie, organize e continue suas ilustracoes",
         cx-300,h*0.37+72,self.fonts.body,C.muted,600,"center")
-    local cw=250,gap=24
+    local cw,gap=250,24
     local left=cx-(cw*3+gap*2)/2
     local top=math.min(h*0.58,h-255)
     local cards={
@@ -184,7 +184,7 @@ function Startup:drawGallery(app,w,h)
             function()self:openCreate(app)end,true)
         return
     end
-    local gap=19,margin=52,available=w-104
+    local gap,margin,available=19,52,w-104
     local columns=math.max(2,math.floor((available+gap)/257))
     local cw=(available-(columns-1)*gap)/columns
     local imageH=math.min(195,cw*0.70)
@@ -259,7 +259,7 @@ function Startup:drawCreate(app,w,h)
     self:label("Novo desenho",57,111,self.fonts.title,C.light)
     self:label("Escolha as dimensoes e crie sua tela.",
         58,151,self.fonts.body,C.muted)
-    local left=53,top=212
+    local left,top=53,212
     local listWidth=math.min(560,w*0.47)
     self:label("TAMANHOS RAPIDOS",left,top-30,self.fonts.small,C.accent)
     local rowH=56
