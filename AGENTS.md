@@ -13,7 +13,7 @@ Reconstruir **funcionalmente o ibisPaint** por engenharia reversa do comportamen
 - **LÖVE** pode servir de hospedeiro/prototipo Lua, **nao substitui** a construcao/integracao do motor C++ do Inkora.
 
 ## REALIDADE ATUAL (NAO INVENTAR PROGRESSO)
-O repositorio possui um prototipo Lua/LÖVE e **um primeiro motor C++ raster integrado via LuaJIT FFI para pincel/borracha**. O motor C++ ABI v4 suporta máscara personalizada PNG, fluxo básico e opacidade por pressão; mantém as três pontas iniciais, calcula regiões sujas e mantém espaçamento entre eventos; LuaJIT administra um cache LRU limitado de tiles de 128×128. Ainda não há equivalência comprovada de pincel com ibisPaint, pressão nativa do stylus ou filtros nativos. A existencia de um pincel C++ nao cumpre a missao. Nao descreva o Inkora como clone completo ou motor profissional.
+O repositorio possui um prototipo Lua/LÖVE e **um primeiro motor C++ raster integrado via LuaJIT FFI para pincel/borracha**. O motor C++ ABI v5 contém compositor RGBA8 (Normal/Multiply/Screen/Add/Overlay), e o v4 suporta máscara personalizada PNG, fluxo básico e opacidade por pressão; mantém as três pontas iniciais, calcula regiões sujas e mantém espaçamento entre eventos; LuaJIT administra um cache LRU limitado de tiles de 128×128. Ainda não há equivalência comprovada de pincel com ibisPaint, pressão nativa do stylus ou filtros nativos. A existencia de um pincel C++ nao cumpre a missao. Nao descreva o Inkora como clone completo ou motor profissional.
 
 ## ORDEM DE TRABALHO OBRIGATORIA
 1. Inspecione o codigo existente e consulte **docs/ROADMAP.md**; preserve o que ja funciona.

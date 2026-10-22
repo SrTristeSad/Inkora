@@ -4,6 +4,13 @@ Document.__index = Document
 
 local MAX_LAYERS = 16
 local MAX_HISTORY = 10
+local BLEND_MODES={"Normal","Multiply","Screen","Add","Overlay"}
+
+Document.BLEND_MODES=BLEND_MODES
+
+local function checkMode(mode)
+    return type(mode)=="number" and mode%1==0 and mode>=0 and mode<=4
+end
 
 local function newCanvas(w, h)
     local c = love.graphics.newCanvas(w, h, {format = "rgba8"})
@@ -28,7 +35,7 @@ end
 local function layer(w, h, name)
     local canvas = newCanvas(w, h)
     Native.registerBlank(canvas)
-    return {canvas = canvas, name = name, opacity = 1, visible = true}
+    return {canvas = canvas, name = name, opacity = 1, visible = true, blendMode=0}
 end
 
 local function cleanText(s)
@@ -42,6 +49,7 @@ local function createSnapshot(self)
         snap.layers[i] = {
             canvas = cloneCanvas(l.canvas, self.width, self.height),
             name = l.name, opacity = l.opacity, visible = l.visible,
+            blendMode = l.blendMode or 0,
         }
     end
     return snap
@@ -53,11 +61,17 @@ function Document.new(w, h, name)
         width = w, height = h, name = name or "Sem titulo",
         selected = 1, layers = {layer(w, h, "Camada 1")},
         history = {}, future = {}, dirty = false, projectKey = nil,
+        compositeDirty=true, compositeCanvas=nil,
     }, Document)
     return self
 end
 
+function Document:markCompositeDirty()
+    self.compositeDirty=true
+end
+
 function Document:checkpoint()
+    self:markCompositeDirty()
     table.insert(self.history, createSnapshot(self))
     if #self.history > MAX_HISTORY then table.remove(self.history, 1) end
     self.future = {}
@@ -69,6 +83,7 @@ function Document:undo()
     table.insert(self.future, createSnapshot(self))
     local snap = table.remove(self.history)
     self.layers, self.selected = snap.layers, snap.selected
+    self:markCompositeDirty()
     self.dirty = true
     return true
 end
@@ -78,6 +93,7 @@ function Document:redo()
     table.insert(self.history, createSnapshot(self))
     local snap = table.remove(self.future)
     self.layers, self.selected = snap.layers, snap.selected
+    self:markCompositeDirty()
     self.dirty = true
     return true
 end
@@ -122,6 +138,54 @@ function Document:setLayerOpacity(index, value, alreadyCheckpoint)
     if math.abs(l.opacity - value) < 0.005 then return end
     if not alreadyCheckpoint then self:checkpoint() end
     l.opacity = value
+    self:markCompositeDirty()
+end
+
+function Document:setLayerBlend(index,mode)
+    local layer=self.layers[index]
+    if not layer or not checkMode(mode) then return false end
+    if mode~=0 and not Native.available() then return false end
+    if (layer.blendMode or 0)==mode then return false end
+    self:checkpoint()
+    layer.blendMode=mode
+    return true
+end
+
+function Document:hasBlendLayers()
+    for _,layer in ipairs(self.layers) do
+        if layer.visible and (layer.blendMode or 0)~=0 then return true end
+    end
+    return false
+end
+
+-- On-demand C++ compositor. Normal-mode documents keep the fast GPU path.
+-- The composited bitmap is cached until a pixel/visibility/blend change.
+function Document:compositedCanvas()
+    if not Native.available() then return nil end
+    if not self.compositeDirty and self.compositeCanvas then return self.compositeCanvas end
+    local white=newCanvas(self.width,self.height)
+    love.graphics.push("all")
+    love.graphics.setCanvas(white)
+    love.graphics.clear(1,1,1,1)
+    love.graphics.pop()
+    local pixels=white:newImageData()
+    for _,layer in ipairs(self.layers) do
+        if layer.visible and layer.opacity>0 then
+            local source=layer.canvas:newImageData()
+            Native.blendLayer(pixels,source,layer.opacity,layer.blendMode or 0)
+        end
+    end
+    local image=love.graphics.newImage(pixels)
+    local canvas=self.compositeCanvas or newCanvas(self.width,self.height)
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.setBlendMode("replace","premultiplied")
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(image)
+    love.graphics.pop()
+    self.compositeCanvas=canvas
+    self.compositeDirty=false
+    return canvas
 end
 
 -- Atualiza uma camada inteira como uma unica operacao de desfazer.
@@ -146,6 +210,12 @@ end
 function Document:sampleColor(px,py)
     px,py=math.floor(px),math.floor(py)
     if px<0 or py<0 or px>=self.width or py>=self.height then return nil end
+    if self:hasBlendLayers() and Native.available() then
+        local canvas=self:compositedCanvas()
+        local image=canvas:newImageData(1,1,px,py,1,1)
+        local r,g,b=image:getPixel(0,0)
+        return {r,g,b}
+    end
     local r,g,b=1,1,1
     for _,l in ipairs(self.layers) do
         if l.visible and l.opacity>0 then
@@ -159,6 +229,15 @@ function Document:sampleColor(px,py)
 end
 
 function Document:draw(x, y, scale)
+    if self:hasBlendLayers() and Native.available() then
+        local composite=self:compositedCanvas()
+        love.graphics.push("all")
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.setBlendMode("alpha","alphamultiply")
+        love.graphics.draw(composite,x,y,0,scale,scale)
+        love.graphics.pop()
+        return
+    end
     love.graphics.push("all")
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.rectangle("fill", x, y, self.width * scale, self.height * scale)
@@ -195,6 +274,7 @@ function Document:save(name)
         manifest[#manifest + 1] = table.concat({
             "layer", l.visible and "1" or "0",
             ("%.4f"):format(l.opacity), cleanText(l.name),
+            tostring(l.blendMode or 0),
         }, "\t")
     end
     assert(love.filesystem.write(root .. "/manifest.txt", table.concat(manifest, "\n") .. "\n"))
@@ -254,6 +334,8 @@ function Document.load(key)
             Native.invalidate(l.canvas)
             l.visible = fields[2] == "1"
             l.opacity = math.max(0, math.min(1, tonumber(fields[3]) or 1))
+            local mode=tonumber(fields[5]) or 0
+            l.blendMode=checkMode(mode) and mode or 0 -- backwards compatible
             table.insert(result.layers, l)
         end
     end
@@ -264,8 +346,12 @@ function Document.load(key)
 end
 
 function Document:exportPNG()
-    local output = newCanvas(self.width, self.height)
-    love.graphics.push("all")
+    local output
+    if self:hasBlendLayers() and Native.available() then
+        output=self:compositedCanvas()
+    else
+        output=newCanvas(self.width,self.height)
+        love.graphics.push("all")
     love.graphics.setCanvas(output)
     love.graphics.clear(1, 1, 1, 1)
     love.graphics.setBlendMode("alpha", "premultiplied")
@@ -275,7 +361,8 @@ function Document:exportPNG()
             love.graphics.draw(l.canvas)
         end
     end
-    love.graphics.pop()
+        love.graphics.pop()
+    end
     assert(love.filesystem.createDirectory("exports"))
     local safe = self.name:gsub("[^%w%-_]", "_"):sub(1, 35)
     local name = (safe ~= "" and safe or "Inkora") .. "-" .. os.date("%Y%m%d-%H%M%S") .. ".png"

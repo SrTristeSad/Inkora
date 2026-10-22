@@ -57,6 +57,15 @@ typedef struct InkoraMask {
     uint64_t buffer_bytes;
 } InkoraMask;
 
+// Layer compositor (C++ ABI v5): straight-alpha RGBA8, bottom-to-top.
+// blend_mode: 0 normal, 1 multiply, 2 screen, 3 add, 4 overlay.
+// out_rgba contains the current composed image; source is read-only.
+// Strides and available byte counts are mandatory for memory safety.
+INKORA_API int32_t inkora_core_blend_layer(
+    uint8_t* out_rgba, uint64_t out_bytes, int32_t out_stride,
+    const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
+    int32_t width, int32_t height, float opacity, int32_t blend_mode);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

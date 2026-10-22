@@ -338,7 +338,7 @@ function UI:drawLayersPanel(app,x,w,h)
     self:button(x+122,204,51,32,"Cima",function() doc:moveLayer(1) end)
     self:button(x+183,204,57,32,"Baixo",function() doc:moveLayer(-1) end)
     self:print("Toque em uma camada para editar",x,251,C.muted,self.small)
-    local rows=math.max(1,math.floor((h-416)/46))
+    local rows=math.max(1,math.floor((h-540)/46))
     local top=math.min(#doc.layers,math.max(rows,doc.selected+rows-1))
     for r=1,math.min(rows,#doc.layers) do
         local index=top-r+1
@@ -358,6 +358,22 @@ function UI:drawLayersPanel(app,x,w,h)
     end
     local layer=doc.layers[doc.selected]
     if layer then
+        self:print("MODO DE MESCLAGEM",x,h-175,C.muted,self.small)
+        local modes=doc.BLEND_MODES
+        local index=(layer.blendMode or 0)+1
+        self:button(x,h-148,34,29,"<",function()
+            local target=(index-2)%#modes
+            if not doc:setLayerBlend(doc.selected,target) then
+                app:statusMessage("Este modo requer o motor C++ v5")
+            end
+        end)
+        self:button(x+206,h-148,34,29,">",function()
+            local target=index%#modes
+            if not doc:setLayerBlend(doc.selected,target) then
+                app:statusMessage("Este modo requer o motor C++ v5")
+            end
+        end)
+        self:print(modes[index],x+38,h-139,C.white,self.small,164,"center")
         self:slider(x+6,h-90,w-12,layer.opacity,"Opacidade da camada",function(v)
             doc:setLayerOpacity(doc.selected,v,true)
         end,tostring(math.floor(layer.opacity*100+0.5)).."%",function()

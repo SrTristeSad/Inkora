@@ -38,6 +38,10 @@ if ffiOK then
         int32_t width, height, stride;
         uint64_t buffer_bytes;
     } InkoraMask;
+    int32_t inkora_core_blend_layer(
+        uint8_t* out_rgba, uint64_t out_bytes, int32_t out_stride,
+        const uint8_t* layer_rgba, uint64_t layer_bytes, int32_t layer_stride,
+        int32_t width, int32_t height, float opacity, int32_t blend_mode);
     int32_t inkora_core_api_version(void);
     int32_t inkora_core_stroke_v4(const InkoraStroke *stroke,
         InkoraStrokeState *state, InkoraRect *dirty, const InkoraTip *tip,
@@ -73,11 +77,11 @@ function Native.available()
         local ok,lib=pcall(ffi.load,p)
         if ok then
             local vok,version=pcall(function() return tonumber(lib.inkora_core_api_version()) end)
-            if vok and version==4 then
+            if vok and version==5 then
                 Native.library=lib;Native.path=p;Native.error=nil
                 return true
             end
-            Native.error="ABI C++ incompativel (requer v4)"
+            Native.error="ABI C++ incompativel (requer v5)"
         end
     end
     Native.error=Native.error or "inkora_core nao encontrado (modo Lua)"
@@ -322,6 +326,22 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
     Native.lastUpload=bounds or {x=0,y=0,width=0,height=0}
     Native.lastUpload.pixels=pixels
     return true
+end
+
+-- Composes a straight-alpha RGBA layer onto output using the native engine.
+-- Both ImageData instances remain owned by Lua during the call.
+function Native.blendLayer(output,source,opacity,mode)
+    assert(Native.available(),"Compositor C++ nao encontrado: "..tostring(Native.error))
+    local w,h=output:getDimensions()
+    assert(source:getWidth()==w and source:getHeight()==h,"Dimensao de camada invalida")
+    assert(output:getFormat()=="rgba8" and source:getFormat()=="rgba8",
+        "Compositor requer RGBA8")
+    local ok=Native.library.inkora_core_blend_layer(
+        ffi.cast("uint8_t*",output:getFFIPointer()),output:getSize(),w*4,
+        ffi.cast("const uint8_t*",source:getFFIPointer()),source:getSize(),w*4,
+        w,h,opacity,mode)
+    if ok~=1 then error("Compositor C++ recusou camada") end
+    return output
 end
 
 return Native

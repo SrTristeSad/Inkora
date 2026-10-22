@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v4 com máscara alfa PNG, fluxo e pressão na opacidade; aguarda validação CI** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v4 com máscara personalizada e configuração de fluxo/pressão** |
+| Motor gráfico Inkora em C++ | **C++ ABI v5 com compositor RGBA/alpha e modos de mesclagem; CI em validação** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v5 com compositor nativo e integração de pincel v4** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
@@ -31,8 +31,9 @@
 - [x] Três pontas nativas iniciais (redonda, chata, granulada procedural), com API C++ v3 e testes.
 - [x] Cache de tiles 128×128 com leituras regionais sob demanda, inicialização transparente e invalidação em operações Lua.
 - [x] Limite de tiles em cache por camada, com LRU e recarregamento seguro após expulsão.
-- [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes.
-- [ ] Camadas: composicao, mascara, clipping, multiplos modos de mesclagem, grupos e undo/redo eficiente.
+- [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes, incluindo blend modes que usam readbacks completos.
+- [x] Compositor C++ v5 e cinco modos iniciais: Normal, Multiply, Screen, Add, Overlay; integrados à interface, undo, exportação PNG e manifesto.
+- [ ] Camadas: máscaras, alpha lock, clipping, grupos, otimização por tiles de composição e undo/redo eficiente.
 - [ ] Selecao e transformacoes: laco, retangulo, varinha, mover, redimensionar, rotacionar.
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.
 - [ ] Entrada de mesa digitalizadora (Windows), latencia e benchmark de tela grande.

@@ -138,6 +138,7 @@ function app:strokeMove(x,y,pressure)
         drag.pressure,pressure or 1)
     drag.pressure=pressure or 1
     drag.x,drag.y=dx,dy
+    self.doc:markCompositeDirty()
 end
 
 function app:strokeEnd(x,y,pressure)
@@ -148,6 +149,7 @@ function app:strokeEnd(x,y,pressure)
     Brush.segment(self.doc.layers[self.doc.selected].canvas,drag.x,drag.y,
         dx,dy,self.color,self.brushSize,self.brushOpacity,self.tool=="eraser",
         drag.nativeStroke,drag.pressure,pressure or 1)
+    self.doc:markCompositeDirty()
 end
 
 function app:shapeStart(x,y)

@@ -149,6 +149,43 @@ local function run()
     assert(white and close(white[1],1) and close(white[2],1),"Undo nao restaurou")
     assert(d:redo(),"Redo falhou")
 
+    -- Testa compositor C++ v5 integrado ao documento (camadas, modo, undo,
+    -- amostragem, exportacao e round-trip do formato existente).
+    if requireNative then
+        local layered=Doc.new(64,64,"Layer C++")
+        Brush.segment(layered.layers[1].canvas,32.5,32.5,32.5,32.5,
+            {1,0,0},55,1,false,Brush.beginStroke(layered.layers[1].canvas))
+        assert(layered:addLayer("Tinta azul"))
+        Brush.segment(layered.layers[2].canvas,32.5,32.5,32.5,32.5,
+            {0,0,1},55,1,false,Brush.beginStroke(layered.layers[2].canvas))
+        assert(layered:setLayerBlend(2,1),"Modo Multiply nao definido")
+        local multiplied=layered:sampleColor(32,32)
+        assert(multiplied[1]<0.08 and multiplied[2]<0.08 and multiplied[3]<0.08,
+            "Camadas Multiply nao produziram preto")
+        local cached=layered:compositedCanvas()
+        assert(cached==layered:compositedCanvas(),"Composicao nao reutilizada")
+        layered:draw(0,0,1)
+        assert(layered:setLayerBlend(2,2),"Modo Screen nao definido")
+        local screened=layered:sampleColor(32,32)
+        assert(screened[1]>0.9 and screened[2]<0.1 and screened[3]>0.9,
+            "Modo Screen deveria produzir magenta")
+        assert(layered:undo(),"Undo do modo de camada falhou")
+        assert(layered.layers[2].blendMode==1,"Undo nao restaurou Multiply")
+        assert(layered:redo(),"Redo do modo de camada falhou")
+        assert(layered.layers[2].blendMode==2,"Redo nao restaurou Screen")
+        local pngPath=layered:exportPNG()
+        assert(pngPath and pngPath:match("%.png$"),"Exportacao com blend falhou")
+        local key=layered.projectKey
+        layered:save("Layer C++")
+        local loaded=Doc.load(layered.projectKey)
+        assert(loaded.layers[2].blendMode==2,"Manifesto perdeu o modo Screen")
+        local restored=loaded:sampleColor(32,32)
+        assert(restored[1]>0.9 and restored[3]>0.9,
+            "Projeto reaberto perdeu composicao C++")
+        assert(loaded:setLayerBlend(2,0),"Modo normal nao restaurado")
+        print("INKORA_NATIVE_LAYER_COMPOSITOR_OK")
+    end
+
     -- Teste de atravessar 3 tiles: nao pode haver costura nas fronteiras.
     local wide=Doc.new(320,192,"Tile boundary")
     Native.resetStats()
