@@ -527,8 +527,13 @@ function love.load()
     -- Existing native test/preview modes still enter the editor directly.
     app.screen=(os.getenv("INKORA_TEST")=="1" or
         (preview and preview~="home" and preview~="gallery"
-        and preview~="create")) and "editor" or "home"
-    if preview=="gallery" then app.startup:openGallery(app)
+        and preview~="gallery-folder" and preview~="create"))
+        and "editor" or "home"
+    if preview=="gallery" or preview=="gallery-folder" then
+        local group=require("tests.preview").gallery(app)
+        if preview=="gallery-folder" and group~="" then
+            app.startup:galleryOpenFolder(group)
+        end
     elseif preview=="create" then app.startup:openCreate(app) end
     if preview=="brush" or preview=="layers" or preview=="color"
         or preview=="rotate" or preview=="settings"
@@ -566,7 +571,8 @@ function love.load()
             app:statusMessage("Estabilizacao adaptativa - previa em tempo real")
         else app.ui.tab=preview end
         app._previewName=preview
-    elseif preview=="home" or preview=="gallery" or preview=="create" then
+    elseif preview=="home" or preview=="gallery" or
+        preview=="gallery-folder" or preview=="create" then
         app._previewName=preview
     end
     if os.getenv("INKORA_TEST")=="1" then
