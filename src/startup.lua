@@ -2,6 +2,7 @@
 -- Functional reverse engineering of the observable ibisPaint entry workflow.
 -- Original Inkora colors/marks; no third-party logos, assets, or art.
 local Document=require("src.document")
+local Folders=require("src.gallery_folders")
 local Startup={}
 Startup.__index=Startup
 local C={
@@ -36,6 +37,8 @@ function Startup.new()
         hits={},galleryScroll=0,thumbnailCache={},projects={},
         galleryDetailKey=nil,gallerySelecting=false,gallerySelected={},
         galleryModal=nil,galleryMenu=false,notice=nil,
+        galleryFolder="",folders=Folders.new(),newMenu=false,
+        galleryDrag=nil,
         draft={name="Meu desenho",width="1280",height="1280",preset=1,focus=nil},
         fonts={
             logo=love.graphics.newFont(56),
@@ -72,6 +75,8 @@ function Startup:refreshGallery()
 end
 function Startup:openGallery(app)
     self:refreshGallery()
+    self.galleryFolder=""
+    self.newMenu=false
     self.galleryDetailKey=nil
     self.gallerySelecting=false
     self.gallerySelected={}
@@ -304,6 +309,131 @@ local function galleryIcon(kind,x,y,s)
     love.graphics.setLineWidth(1)
 end
 
+-- Folders are saved as references to immutable project keys; no project
+-- images or INKORA1 layers are moved or rewritten while organizing.
+function Startup:galleryEntries()
+    return self.folders:contents(self.projects,self.galleryFolder)
+end
+function Startup:galleryOpenFolder(id)
+    if not self.folders.items[id] then return false end
+    self.galleryFolder=id
+    self.galleryScroll=0
+    self.galleryDetailKey=nil
+    self.gallerySelecting=false
+    self.gallerySelected={}
+    self.galleryMenu=false
+    self.newMenu=false
+    self.notice=nil
+    return true
+end
+function Startup:galleryBack(app)
+    if self.galleryDetailKey then
+        self.galleryDetailKey=nil
+    elseif self.gallerySelecting then
+        self:galleryToggleSelection()
+    elseif self.galleryFolder~="" then
+        self.galleryFolder=self.folders:parent(self.galleryFolder)
+        self.galleryScroll=0
+    else
+        app.screen="home"
+    end
+    self.galleryMenu=false
+    self.newMenu=false
+end
+function Startup:galleryNewMenu()
+    self.galleryMenu=false
+    self.newMenu=not self.newMenu
+end
+function Startup:galleryAskFolder(keys)
+    self.newMenu=false
+    self.galleryModal={kind="folder",value="Nova pasta",keys=keys}
+end
+function Startup:galleryCreateFolder()
+    local modal=self.galleryModal
+    if not modal or modal.kind~="folder" then return false end
+    local ok,id=pcall(function()
+        local result=self.folders:create(modal.value,self.galleryFolder)
+        if modal.keys and #modal.keys>0 then
+            self.folders:moveProjects(modal.keys,result)
+        end
+        return result
+    end)
+    if not ok then modal.error=tostring(id);return false end
+    self.galleryModal=nil
+    self.gallerySelected={}
+    self.gallerySelecting=false
+    self:refreshGallery()
+    self.notice="Pasta criada com sucesso."
+    return id
+end
+function Startup:galleryAskRenameFolder()
+    if self.galleryFolder=="" then return end
+    self.galleryMenu=false
+    self.galleryModal={kind="folder-rename",id=self.galleryFolder,
+        value=self.folders:name(self.galleryFolder)}
+end
+function Startup:galleryRenameFolder()
+    local modal=self.galleryModal
+    if not modal or modal.kind~="folder-rename" then return false end
+    local ok,result=pcall(function()
+        return self.folders:rename(modal.id,modal.value)
+    end)
+    if not ok then modal.error=tostring(result);return false end
+    self.galleryModal=nil
+    self.notice="Pasta renomeada."
+    return true
+end
+function Startup:galleryDeleteEmptyFolder()
+    if self.galleryFolder=="" then return end
+    local folder=self.galleryFolder
+    local parent=self.folders:parent(folder)
+    local ok,err=pcall(function()self.folders:deleteEmpty(folder)end)
+    if ok then
+        self.galleryFolder=parent
+        -- parent is captured before deletion
+        if self.galleryFolder=="" then self.galleryScroll=0 end
+        self.notice="Pasta vazia removida."
+    else
+        self.notice="Nao foi possivel remover: "..tostring(err)
+    end
+    self.galleryMenu=false
+end
+function Startup:galleryAskMove()
+    local keys=self:gallerySelectedKeys()
+    if self.galleryDetailKey then keys={self.galleryDetailKey} end
+    if #keys==0 then return end
+    self.galleryMenu=false
+    self.galleryModal={kind="move",keys=keys}
+end
+function Startup:galleryMoveKeys(keys,destination)
+    local ok,err=pcall(function()
+        self.folders:moveProjects(keys,destination)
+    end)
+    if not ok then
+        self.notice="Erro movendo desenho: "..tostring(err)
+        return false
+    end
+    self.galleryModal=nil
+    self.gallerySelected={}
+    self.gallerySelecting=false
+    self.galleryDetailKey=nil
+    self.galleryScroll=0
+    self.notice=#keys.." desenho(s) movido(s) com sucesso."
+    return true
+end
+function Startup:galleryMoveSelected(destination)
+    if not self.galleryModal or self.galleryModal.kind~="move" then return end
+    return self:galleryMoveKeys(self.galleryModal.keys,destination)
+end
+function Startup:galleryMoveFolder(id,destination)
+    local ok,err=pcall(function()
+        self.folders:moveFolder(id,destination)
+    end)
+    if ok then
+        self.galleryFolder=destination
+        self.notice="Pasta movida."
+    else self.notice=tostring(err) end
+end
 function Startup:galleryProject(key)
     for _,p in ipairs(self.projects) do
         if p.key==key then return p end
