@@ -912,12 +912,12 @@ function Startup:drawNewDialog(app,w,h)
     option("Pasta",py+39,"new-folder",function()
         self:galleryAskFolder()
     end)
-    option("Importar imagem PNG",py+80,"new-import",function()
+    option("Importar PNG / IPV",py+80,"new-import",function()
         modal.importing=true
     end)
     if modal.importing then
         drawRect(px+8,py+122,panelW-16,44,{0.95,0.96,0.99},3)
-        self:label("Arraste um PNG para esta janela para criar uma obra.",
+        self:label("Arraste PNG ou IPV (imagem composta) para criar uma obra.",
             px+12,py+128,self.fonts.small,G.ink,panelW-24,"center")
     else
         drawRect(px+6,py+123,panelW-12,26,{0.24,0.24,0.24})
