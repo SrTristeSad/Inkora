@@ -1573,6 +1573,56 @@ local function run(app)
     print("INKORA_ASPECT_CORRECT_GALLERY_PREVIEWS_GPU_OK")
     print("INKORA_GALLERY_PNG_IMPORT_NATIVE_DOCUMENT_OK")
 
+    -- Mock a valid IPV log containing a REAL PNG composited snapshot.
+    -- Verify the gallery can read the format without copying any original
+    -- ibisPaint code or falsely reconstructing text/layer history.
+    local function be16(v)
+        return string.char(math.floor(v/256)%256,v%256)
+    end
+    local function be32(v)
+        return string.char(math.floor(v/16777216)%256,
+            math.floor(v/65536)%256,math.floor(v/256)%256,v%256)
+    end
+    local function record(major,minor,payload)
+        return be16(major)..be16(minor)..be32(#payload)..payload..
+            be32((4294967296-(#payload+8))%4294967296)
+    end
+    local head=record(0x100,0x100,
+        string.rep("\\0",8)..be32(64)..be32(64))
+    local snap=record(0x100,0x500,
+        string.rep("\\0",8)..be32(0xffffffff)..be32(0)..
+        be16(0)..be32(#bytes)..bytes)
+    local ipvBytes=head..snap
+    local mockIPV={
+        getFilename=function()
+            return "C:"..string.char(92).."desenhos"..
+                string.char(92).."estudo.ipv"
+        end,
+        getSize=function()return #ipvBytes end,
+        open=function()end,
+        read=function()return ipvBytes end,
+        close=function()end,
+    }
+    assert(app:importGalleryIPV(mockIPV),"IPV valido nao importou")
+    assert(app.screen=="editor" and app.doc.width==64 and
+        app.doc.height==64 and app.doc.name=="estudo",
+        "Imagem composta nao foi convertida em obra Inkora")
+    assert(#app.doc.layers==2,"IPV nao deveria inventar camadas nativas")
+    local originalKey=app.doc.projectKey
+    local corrupted=ipvBytes:sub(1,-2)
+    local badIPV={
+        getFilename=mockIPV.getFilename,
+        getSize=function()return #corrupted end,
+        open=function()end,
+        read=function()return corrupted end,
+        close=function()end,
+    }
+    assert(not app:importGalleryIPV(badIPV),"IPV truncado foi aceito")
+    assert(app.doc.projectKey==originalKey,
+        "Falha IPV nao deve substituir o desenho aberto")
+    assert(app:returnToGallery())
+    print("INKORA_IPV_FLATTENED_IMPORT_AND_CORRUPTION_REJECTED_GPU_OK")
+
     -- Folder information must be a bottom sheet with editable title.
     assert(app.startup:galleryOpenFolder(group))
     assert(app.startup:galleryFolderInfo())
