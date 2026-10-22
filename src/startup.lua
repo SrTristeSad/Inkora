@@ -796,7 +796,6 @@ function Startup:drawGallery(app,w,h)
     if self.galleryMenu then
         local mw=206
         local mx=math.min(w-218,248)
-        local my=h-footerH-#items*44-2
         local items={
             {"Renomear",function()self:galleryRename()end,
                 self:galleryCurrentKey()~=nil},
@@ -812,6 +811,7 @@ function Startup:drawGallery(app,w,h)
                 self.galleryFolder~=""},
             {"Restaurar ultima obra",function()self:galleryRestore()end,true},
         }
+        local my=h-footerH-#items*44-2
         drawRect(mx,my,mw,#items*44,G.bar,4)
         for i,item in ipairs(items) do
             local iy=my+(i-1)*44
@@ -852,6 +852,49 @@ function Startup:drawGalleryModal(app,w,h)
         self:label("Salvar",x+width-112,y+214,self.fonts.body,G.blue)
         self:hit(x+width/2,y+196,width/2-14,50,"modal-confirm",
             function()self:galleryConfirmRename()end)
+    elseif modal.kind=="folder" or modal.kind=="folder-rename" then
+        self:label(modal.kind=="folder" and "Criar pasta" or
+            "Renomear pasta",x+22,y+22,self.fonts.heading,G.white)
+        self:label("Nome da pasta",x+23,y+71,self.fonts.small,G.white)
+        drawRect(x+22,y+97,width-44,46,G.white,4)
+        self:label(modal.value.."|",x+36,y+110,
+            self.fonts.body,G.ink,width-74)
+        if modal.error then self:label(modal.error,x+23,y+153,
+            self.fonts.small,C.gold,width-46) end
+        self:label("Cancelar",x+35,y+214,self.fonts.body,G.white)
+        self:hit(x+17,y+196,width/2-18,50,"modal-cancel",
+            function()self.galleryModal=nil end)
+        self:label("OK",x+width-90,y+214,self.fonts.body,G.blue)
+        self:hit(x+width/2,y+196,width/2-14,50,"modal-confirm",
+            function()
+                if modal.kind=="folder" then self:galleryCreateFolder()
+                else self:galleryRenameFolder() end
+            end)
+    elseif modal.kind=="move" then
+        self:label("Mover desenhos para",x+21,y+13,
+            self.fonts.heading,G.white,width-42)
+        local folders={{id="",name="Minha Galeria"}}
+        for _,id in ipairs(self.folders.order) do
+            local entry=self.folders.items[id]
+            if entry then folders[#folders+1]={id=id,name=entry.name} end
+        end
+        self:label("Toque na pasta de destino:",x+22,y+50,
+            self.fonts.small,G.white)
+        local listY=y+76
+        local rows=math.min(4,#folders)
+        for i=1,rows do
+            local entry=folders[i]
+            local iy=listY+(i-1)*30
+            self:label(entry.name,x+30,iy+4,self.fonts.body,G.blue,width-60)
+            self:hit(x+18,iy,width-36,28,"move-folder-"..i,
+                function()self:galleryMoveSelected(entry.id)end)
+        end
+        if #folders>rows then
+            self:label("Mais pastas: use o menu na pasta desejada",
+                x+21,y+218,self.fonts.small,G.muted,width-42)
+        end
+        self:hit(x,y+229,width,26,"modal-cancel",
+            function()self.galleryModal=nil end)
     elseif modal.kind=="trash" then
         self:label("Mover para a lixeira?",x+22,y+28,
             self.fonts.heading,G.white,width-44)
@@ -995,13 +1038,16 @@ function Startup:keypressed(app,key)
         local modal=self.galleryModal
         if modal then
             if key=="escape" then self.galleryModal=nil
-            elseif modal.kind=="rename" then
+            elseif modal.kind=="rename" or modal.kind=="folder" or
+                modal.kind=="folder-rename" then
                 if key=="backspace" then
                     local utf8=require("utf8")
                     local at=utf8.offset(modal.value,-1)
                     if at then modal.value=modal.value:sub(1,at-1) end
                 elseif key=="return" or key=="kpenter" then
-                    self:galleryConfirmRename()
+                    if modal.kind=="rename" then self:galleryConfirmRename()
+                    elseif modal.kind=="folder" then self:galleryCreateFolder()
+                    else self:galleryRenameFolder() end
                 end
             elseif modal.kind=="trash" and (key=="return" or key=="kpenter") then
                 self:galleryTrashConfirmed()
@@ -1012,6 +1058,9 @@ function Startup:keypressed(app,key)
             if self.galleryMenu then self.galleryMenu=false
             elseif self.galleryDetailKey then self.galleryDetailKey=nil
             elseif self.gallerySelecting then self:galleryToggleSelection()
+            elseif self.galleryFolder~="" then
+                self.galleryFolder=self.folders:parent(self.galleryFolder)
+                self.galleryScroll=0
             else app.screen="home" end
             return true
         elseif key=="return" or key=="kpenter" then
@@ -1043,7 +1092,9 @@ function Startup:keypressed(app,key)
     return false
 end
 function Startup:textinput(text)
-    if self.galleryModal and self.galleryModal.kind=="rename" then
+    if self.galleryModal and (self.galleryModal.kind=="rename" or
+        self.galleryModal.kind=="folder" or
+        self.galleryModal.kind=="folder-rename") then
         local modal=self.galleryModal
         modal.value=(modal.value..text:gsub("[\r\n\t]"," ")):sub(1,64)
         modal.error=nil
