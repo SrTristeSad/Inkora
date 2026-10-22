@@ -85,6 +85,12 @@ end
 
 
 function Preview.gallery(app)
+    app.startup:refreshGallery()
+    if #app.startup.projects>0 then
+        local groups=app.startup.folders:children("")
+        app.startup:openGallery(app)
+        return groups[1] and groups[1].id or ""
+    end
     local keys={}
     local names={"Estudo de cor","Aquarela azul","Personagem","Nanquim","Flores","Rascunhos"}
     for i,name in ipairs(names) do
