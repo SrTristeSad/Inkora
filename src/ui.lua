@@ -615,6 +615,58 @@ function UI:drawSettings(app,x,w,h)
     end
 end
 
+function UI:drawTexturePanel(app,x,w,h)
+    self:print("TEXTURA DO PINCEL",x,155,C.white)
+    self:print("Carimbos reais gerados pelo nucleo C++ v9",x,181,C.muted,self.small,w)
+    self:print("Os ajustes sao independentes para cada preset.",x,205,C.muted,self.small,w)
+    local options={
+        {"Intensidade da textura",app.brushTexture,function(v)
+            app.brushTexture=v
+        end,tostring(math.floor(app.brushTexture*100+0.5)).."%"},
+        {"Dispersao dos carimbos",app.brushScatter,function(v)
+            app.brushScatter=v
+        end,tostring(math.floor(app.brushScatter*100+0.5)).."%"},
+        {"Variacao de tamanho",app.brushSizeJitter,function(v)
+            app.brushSizeJitter=v
+        end,tostring(math.floor(app.brushSizeJitter*100+0.5)).."%"}
+    }
+    for i,p in ipairs(options) do
+        self:slider(x+12,259+(i-1)*88,w-24,p[2],p[1],p[3],p[4])
+    end
+    self:print("PREVIA AO VIVO - MOTOR C++",x,510,C.white,self.small)
+    self:rect(x+5,537,w-10,94,C.surface,11)
+    local img=BrushPreview.getLive(app)
+    if img then
+        local pw,ph=img:getDimensions()
+        love.graphics.push("all")
+        love.graphics.setScissor(x+10,542,w-20,83)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(img,x+12,549,0,(w-24)/pw,62/ph)
+        love.graphics.pop()
+    else
+        self:print("Motor C++ indisponivel",x+18,563,C.muted,self.small,w-32)
+    end
+    self:button(x+4,648,(w-14)/2,36,"Salvar preset",function()
+        app:saveBrushProfile()
+    end,"primary")
+    self:button(x+10+(w-14)/2,648,(w-14)/2,36,"Restaurar",function()
+        app:resetBrushProfile()
+    end)
+    self:button(x+4,698,w-8,31,"Comparar com o padrao",function()
+        local factory=Presets.find(app.presetId)
+        if factory then
+            self.textureReference=BrushPreview.get(factory,app.tipMask)
+            app:statusMessage("Textura padrao do preset gerada no motor C++")
+        end
+    end)
+    if self.textureReference and h>=790 then
+        self:print("REFERENCIA PADRAO",x+5,740,C.muted,self.small)
+        local pw,ph=self.textureReference:getDimensions()
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(self.textureReference,x+12,757,0,(w-24)/pw,29/ph)
+    end
+end
+
 function UI:drawColorPanel(app,x,w,h)
     self:print("ESTUDIO DE CORES",x,155,C.white)
     self:print("Toque no anel ou no quadrado",x,180,C.muted,self.small)
@@ -853,9 +905,9 @@ function UI:draw(app)
     local panelWidth=self.inspectorWidth-36
     self:rect(px,78,panelWidth,43,C.top,10)
     local tabs={{"Pinceis","brush"},{"Ajustes","settings"},
-        {"Camadas","layers"},{"Cor","color"}}
+        {"Textura","texture"},{"Camadas","layers"},{"Cor","color"}}
     for i,t in ipairs(tabs) do
-        local tw=(panelWidth-8)/4
+        local tw=(panelWidth-8)/#tabs
         local xx=px+4+(i-1)*tw
         if self.tab==t[2] then self:rect(xx,82,tw,35,C.surface2,8) end
         self:print(t[1],xx+1,93,self.tab==t[2] and C.accent or C.muted,
@@ -866,6 +918,7 @@ function UI:draw(app)
     if self.tab=="brush" then self:drawBrushPanel(app,px,panelWidth,h)
     elseif self.tab=="settings" then self:drawSettings(app,px,panelWidth,h)
     elseif self.tab=="layers" then self:drawLayersPanel(app,px,panelWidth,h)
+    elseif self.tab=="texture" then self:drawTexturePanel(app,px,panelWidth,h)
     else self:drawColorPanel(app,px,panelWidth,h) end
     -- Splitter is intentionally above the panels in hit priority.
     self:rect(right-2,64,4,h-100,C.divider)

@@ -608,6 +608,54 @@ local function run(app)
                 "Pinceis de pontas diferentes produzem a mesma miniatura")
             assert(BrushPreview.stats().count>=2)
         end
+        -- Dedicated texture inspector updates the actual C++ stroke and
+        -- saves the 3 new parameters in an editable brush profile.
+        assert(app:choosePreset("ink"))
+        UI.tab="texture"
+        love.draw()
+        local basePreview=BrushPreview.getLive(app)
+        assert(basePreview~=nil)
+        assert(UI:click(px+211,259),"Slider de textura nao clicavel")
+        UI:mousereleased()
+        assert(app.brushTexture>0.6,"Slider nao alterou textura real")
+        assert(UI:click(px+196,347),"Slider de dispersao nao clicavel")
+        UI:mousereleased()
+        assert(app.brushScatter>0.5,"Slider nao alterou dispersao")
+        assert(UI:click(px+218,435),"Slider de variacao nao clicavel")
+        UI:mousereleased()
+        assert(app.brushSizeJitter>0.6,"Slider nao alterou tamanho variavel")
+        local changedPreview=BrushPreview.getLive(app)
+        assert(changedPreview and changedPreview~=basePreview,
+            "Previa nao mudou ao alterar dinamica do pincel")
+        assert(BrushPreview.getLive(app)==changedPreview)
+        local oldData,newData=basePreview:newImageData(),
+            changedPreview:newImageData()
+        local difference=0
+        for yy=0,43,2 do for xx=0,167,2 do
+            local _,_,_,o=oldData:getPixel(xx,yy)
+            local _,_,_,n=newData:getPixel(xx,yy)
+            difference=difference+math.abs(n-o)
+        end end
+        assert(difference>10,"Textura e dispersao nao alteraram pixels")
+        love.draw()
+        assert(UI:click(px+40,661),"Salvar preset texturizado nao clicavel")
+        local Profiles=require("src.brush_profiles")
+        local savedTexture=Profiles.read().ink
+        assert(savedTexture and savedTexture.texture>0.6 and
+            savedTexture.scatter>0.5 and savedTexture.sizeJitter>0.6,
+            "Novo preset nao persistiu dados de textura")
+        assert(app:choosePreset("marker"))
+        assert(app:choosePreset("ink"))
+        assert(app.brushTexture>0.6 and app.brushScatter>0.5,
+            "Troca de pincel perdeu configuracao texturizada")
+        UI.tab="texture"
+        love.draw()
+        assert(UI:click(px+200,661),"Restaurar textura nao clicavel")
+        assert(app.brushTexture==0 and app.brushScatter==0 and
+            app.brushSizeJitter==0,"Reset nao restaurou pincel padrao")
+        UI.tab="brush"
+        love.draw()
+        print("INKORA_TEXTURE_EDITABLE_PREVIEW_GPU_OK")
         print("INKORA_NATIVE_BRUSH_PREVIEWS_OK")
 
         -- Splitter can resize the inspector without resetting zoom/rotation.

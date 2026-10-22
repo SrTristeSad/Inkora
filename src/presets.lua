@@ -6,7 +6,8 @@ local Presets={
      pressureOpacity=0.65,preview="solid"},
     {id="pencil",name="Lapis",family="Esboco",size=5,hardness=0.75,
      spacing=0.13,opacity=0.62,flow=0.74,stabilization=0.18,tip=2,
-     pressureOpacity=0.8,preview="pencil"},
+     pressureOpacity=0.8,texture=0.35,scatter=0.08,sizeJitter=0.20,
+     preview="pencil"},
     {id="marker",name="Marcador",family="Tinta",size=28,hardness=1,
      spacing=0.10,opacity=0.65,flow=0.8,stabilization=0.10,tip=1,
      pressureOpacity=0.25,angle=0,followPath=true,preview="flat"},
@@ -15,7 +16,8 @@ local Presets={
      pressureOpacity=0.6,preview="soft"},
     {id="chalk",name="Giz",family="Textura",size=29,hardness=0.8,
      spacing=0.12,opacity=0.85,flow=0.75,stabilization=0.15,tip=2,
-     pressureOpacity=0.5,preview="grain"},
+     pressureOpacity=0.5,texture=0.65,scatter=0.42,sizeJitter=0.45,
+     preview="grain"},
     {id="paint",name="Pincel macio",family="Pintura",size=21,hardness=0.3,
      spacing=0.09,opacity=0.75,flow=0.55,stabilization=0.30,tip=0,
      pressureOpacity=0.6,preview="paint"},
@@ -31,6 +33,9 @@ local Presets={
 for _,preset in ipairs(Presets) do
     if preset.angle==nil then preset.angle=0 end
     if preset.followPath==nil then preset.followPath=false end
+    if preset.texture==nil then preset.texture=0 end
+    if preset.scatter==nil then preset.scatter=0 end
+    if preset.sizeJitter==nil then preset.sizeJitter=0 end
 end
 
 function Presets.find(id)

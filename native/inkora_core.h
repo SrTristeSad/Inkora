@@ -123,6 +123,21 @@ INKORA_API int32_t inkora_core_stroke_v8(
     float pressure_opacity, const InkoraPaintClip *clip,
     InkoraBrushDirection *direction);
 
+// ABI v9: deterministic texture, dab scattering and size variation.
+// stamp_index is mutable stroke state: pass the same initial value to
+// every tile of a segment, then retain the returned value once per segment.
+// All three amounts are normalized to [0,1]; zero preserves ABI v8 visuals.
+typedef struct InkoraBrushDynamics {
+    float texture, scatter, size_jitter;
+    uint32_t stamp_index;
+} InkoraBrushDynamics;
+
+INKORA_API int32_t inkora_core_stroke_v9(
+    const InkoraStroke *stroke, InkoraStrokeState *state, InkoraRect *dirty,
+    const InkoraTip *tip, const InkoraMask *mask, float flow,
+    float pressure_opacity, const InkoraPaintClip *clip,
+    InkoraBrushDirection *direction, InkoraBrushDynamics *dynamics);
+
 INKORA_API int32_t inkora_core_api_version(void);
 // Legacy entry point, starts a fresh stroke with each call.
 INKORA_API int32_t inkora_core_stroke(const InkoraStroke *stroke);

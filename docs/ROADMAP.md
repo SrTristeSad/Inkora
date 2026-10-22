@@ -10,8 +10,8 @@
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
-| Motor gráfico Inkora em C++ | **C++ ABI v8: orientação de pontas chatas/PNG pela tangente da trajetória; validar CI** |
-| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v8, estado direcional por segmento, blend, máscaras e clipping** |
+| Motor gráfico Inkora em C++ | **C++ ABI v9: textura mundial, dispersão determinística e variação de carimbo; testes C++ e gráficos** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI ABI v9, estado contínuo de textura e direção, blend, máscaras e clipping** |
 | Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; build automático. Execução/mesa real Windows ainda sem validação** |
 | Entrada de caneta Windows | **Ponte WinTab experimental via LuaJIT FFI, sem interceptar SDL, com curvas de pressão e fallback; teste com driver físico pendente** |
 | Android sobre o mesmo núcleo | **Futuro** |
@@ -31,6 +31,9 @@
 - [ ] Testar a ponte com modelos reais de mesa no Windows, incluindo pressionar/soltar, perda de foco, duplicidade de eventos, latência e inclinação.
 - [x] Primeiro estabilizador adaptativo à taxa de eventos e à velocidade do cursor (filtro de baixa passagem variável), com conclusão amostrada do traço e cursor/traço suavizado visível.
 - [x] C++ v8: orientação dinâmica da ponta chata e PNG ao seguir o traço, ângulo fixo configurável e estado preservado entre tiles/eventos.
+- [x] C++ v9: textura determinística em coordenadas globais, dispersão e variação do diâmetro por carimbo, sem costuras entre tiles.
+- [x] Aba Textura com três sliders, visualização no motor C++ e presets compatíveis com arquivos v7/v8.
+- [ ] Texturas PNG contínuas, modos de pincel úmido, deformação de ponta por inclinação e desempenho para telas grandes.
 - [x] Salvar e restaurar ângulo e modo de direção em presets, mantendo leitura de configurações antigas.
 - [x] A prévia em C++ também simula estabilização; teste puro Lua para variação de taxa/tremor e teste gráfico integrado ao C++.
 - [x] Ponta personalizada por PNG até 512×512, máscara alfa (ou luminância invertida), com armazenamento local.

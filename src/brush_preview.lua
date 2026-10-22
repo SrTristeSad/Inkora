@@ -17,6 +17,8 @@ local function signature(style,mask,ink)
         tostring(style.flow),tostring(style.pressureOpacity),
         tostring(style.stabilization or 0),
         tostring(style.angle or 0),tostring(style.followPath or false),
+        tostring(style.texture or 0),tostring(style.scatter or 0),
+        tostring(style.sizeJitter or 0),
         mask and tostring(mask.buffer) or "nomask",
         string.format("%.4f,%.4f,%.4f",
             ink[1] or 0,ink[2] or 0,ink[3] or 0)
@@ -37,6 +39,8 @@ local function render(style,mask,ink)
         grain=0.85,seed=239,
         mask=style.tip==3 and mask or nil,
         flow=style.flow,pressureOpacity=style.pressureOpacity,
+        texture=style.texture or 0,scatter=style.scatter or 0,
+        sizeJitter=style.sizeJitter or 0,
     })
     assert(session,"Motor C++ nao criou a previa de pincel")
     -- A scaled simulation makes small and big tips identifiable without
@@ -94,6 +98,8 @@ function Preview.getLive(app)
         stabilization=app.stabilization,
         tip=app.brushTip,angle=app.brushAngle,
         followPath=app.brushFollowPath,
+        texture=app.brushTexture,scatter=app.brushScatter,
+        sizeJitter=app.brushSizeJitter,
     }
     local mask=style.tip==3 and app.tipMask or nil
     if style.tip==3 and not mask then return nil end
