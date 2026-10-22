@@ -1292,6 +1292,7 @@ local function run(app)
     app.startup:refreshGallery()
     clickStartup("open-gallery")
     assert(app.screen=="gallery","Inicio nao abriu galeria")
+    clickStartup("tool-plus")
     clickStartup("open-create")
     assert(app.screen=="create","Galeria nao abriu criacao")
     clickStartup("preset-7")
@@ -1405,6 +1406,58 @@ local function run(app)
     assert(not app.startup.gallerySelecting)
     assert(not app.startup.gallerySelected[key])
     print("INKORA_GALLERY_DETAIL_RENAME_DUPLICATE_TRASH_RESTORE_GPU_OK")
+
+    -- End-to-end group management: + -> New Folder, nested folder,
+    -- pointer drag into a group, persisted memberships, move out.
+    app.startup:galleryAskFolder()
+    assert(app.startup.galleryModal.kind=="folder")
+    app.startup.galleryModal.value="Minhas artes"
+    local group=app.startup:galleryCreateFolder()
+    assert(group and app.startup.folders:name(group)=="Minhas artes")
+    love.draw()
+    local folderHit,artHit
+    for _,hit in ipairs(app.startup.hits) do
+        if hit.kind:match("^gallery%-folder%-") then folderHit=hit end
+        if hit.kind:match("^gallery%-art%-") then artHit=hit end
+    end
+    assert(folderHit and artHit,
+        "Grupo e desenho precisam aparecer juntos na galeria")
+    assert(app.startup:pointerPressed(artHit.x+artHit.w/2,artHit.y+artHit.h/2))
+    app.startup:pointerMoved(folderHit.x+folderHit.w/2,folderHit.y+folderHit.h/2)
+    app.startup:pointerReleased(folderHit.x+folderHit.w/2,folderHit.y+folderHit.h/2)
+    local groupedCount=0
+    for _,p in ipairs(app.startup.projects) do
+        if app.startup.folders:location(p.key)==group then
+            groupedCount=groupedCount+1
+        end
+    end
+    assert(groupedCount==1,"Arrastar desenho nao inseriu no grupo")
+    assert(app.startup:galleryOpenFolder(group))
+    app.startup:galleryAskFolder()
+    app.startup.galleryModal.value="Estudos"
+    local child=app.startup:galleryCreateFolder()
+    assert(app.startup.folders:parent(child)==group,
+        "Criacao de subpastas nao funciona")
+    app.startup:galleryAskRenameFolder()
+    app.startup.galleryModal.value="Arte final"
+    assert(app.startup:galleryRenameFolder())
+    assert(app.startup.folders:name(group)=="Arte final")
+    local savedGroup=require("src.gallery_folders").new()
+    assert(savedGroup:name(group)=="Arte final" and
+        savedGroup:parent(child)==group,
+        "Grupos nao persistiram entre sessoes")
+    app.startup.folders:moveProjects({key},child)
+    assert(app.startup.folders:location(key)==child)
+    local insideCopy=savedDoc.load(key)
+    assert(insideCopy.width==256 and insideCopy.height==256,
+        "Mover para pasta alterou arquivo de pintura")
+    app.startup.folders:moveProjects({key},"")
+    assert(app.startup.folders:location(key)=="",
+        "Nao foi possivel tirar a obra do grupo")
+    app.startup.galleryFolder=""
+    app.startup:refreshGallery()
+    print("INKORA_GALLERY_CREATE_NEST_MOVE_DRAG_OK")
+
     print("INKORA_GPU_SMOKE_OK")
 end
 
