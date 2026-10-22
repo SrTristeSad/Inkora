@@ -26,7 +26,8 @@ local function clamp(v,a,b) return math.max(a,math.min(b,v)) end
 function UI.new()
     return setmetatable({
         hits={}, modal=nil, draggingSlider=nil, tab="brush",
-        layerScroll=0, hue=0.55, saturation=0.75, brightness=0.9,
+        layerScroll=0, favoriteOnly=false,
+        hue=0.55, saturation=0.75, brightness=0.9,
         font=love.graphics.newFont(14),
         small=love.graphics.newFont(12),
         large=love.graphics.newFont(21),
@@ -412,9 +413,23 @@ end
 
 function UI:drawBrushPanel(app,x,w,h)
     self:print("BIBLIOTECA DE PINCEIS",x,155,C.white)
-    self:print("Escolha o traco antes de desenhar",x,180,C.muted,self.small)
+    self:print("Escolha o traco antes de desenhar",x,180,C.muted,self.small,168)
+    self:button(x+w-105,173,105,27,
+        self.favoriteOnly and "Todos" or "Favoritos",function()
+            self.favoriteOnly=not self.favoriteOnly
+        end,self.favoriteOnly and "primary" or "ghost")
+    local shown={}
+    for _,preset in ipairs(Presets) do
+        if not self.favoriteOnly or app.favorites[preset.id] then
+            shown[#shown+1]=preset
+        end
+    end
     local itemWidth=(w-9)/2
-    for i,preset in ipairs(Presets) do
+    if #shown==0 then
+        self:print("Nenhum favorito. Marque com * nos pinceis.",
+            x+12,254,C.muted,self.small,w-24)
+    end
+    for i,preset in ipairs(shown) do
         local col=(i-1)%2
         local row=math.floor((i-1)/2)
         local px=x+col*(itemWidth+9)
@@ -436,6 +451,10 @@ function UI:drawBrushPanel(app,x,w,h)
                 app:statusMessage("Ponta PNG: Shift + arraste uma imagem para importar")
             end
         end)
+        self:button(px+itemWidth-29,py+4,25,23,
+            app.favorites[preset.id] and "*" or "+",function()
+                app:toggleFavorite(preset.id)
+            end,app.favorites[preset.id] and "primary" or "ghost")
     end
     self:print("CONTROLE RAPIDO",x,489,C.muted,self.small)
     self:slider(x+9,532,w-20,(app.brushSize-1)/119,"Tamanho",function(v)
@@ -715,6 +734,22 @@ function UI:drawWorkspaceHeader(app)
         app:zoomAt(1.2,(x+r)/2,y+(my-y-44)/2)
     end,"ghost")
     self:button(bx+159,y+16,48,29,"Tela",function() app:fitView() end,"ghost")
+    self:rect(bx-5,y+55,218,35,C.top,9)
+    local left,top,right,bottom=self:workspaceBounds()
+    local centerX,centerY=(left+right)/2,(top+bottom)/2
+    self:button(bx+1,y+58,35,28,"<",function()
+        app:rotateAt(-15,centerX,centerY)
+    end,"ghost")
+    local angle=math.deg(app.rotation)
+    if angle>180 then angle=angle-360 end
+    self:print(("%d deg"):format(math.floor(angle+0.5)),
+        bx+42,y+66,C.white,self.small,83,"center")
+    self:button(bx+129,y+58,35,28,">",function()
+        app:rotateAt(15,centerX,centerY)
+    end,"ghost")
+    self:button(bx+168,y+58,44,28,"0",function()
+        app:resetRotation()
+    end,"ghost")
 end
 
 function UI:draw(app)
@@ -744,8 +779,9 @@ function UI:draw(app)
     self:print(app.message or "Pronto para criar",18,h-25,C.white,
         self.small,math.max(100,w-545))
     local mode=app.tool=="brush" and (Presets.find(app.presetId) or {}).name or app.tool
-    self:print(("%d x %d  |  %s  |  zoom %d%%"):format(
-        app.doc.width,app.doc.height,mode or "",math.floor(app.zoom*100+0.5)),
+    self:print(("%d x %d  |  %s  |  zoom %d%%  |  giro %d"):format(
+        app.doc.width,app.doc.height,mode or "",math.floor(app.zoom*100+0.5),
+        math.floor(math.deg(app.rotation)+0.5)),
         w-505,h-25,C.muted,self.small,486,"right")
     if self.modal then self:drawModal(app) end
     love.graphics.pop()

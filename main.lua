@@ -6,6 +6,7 @@ local UI = require("src.ui")
 local palette = require("src.palette")
 local Native = require("src.native")
 local Presets = require("src.presets")
+local Viewport = require("src.viewport")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
@@ -13,7 +14,8 @@ local app = {
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
     presetId="ink",
     fillTolerance=0.02, colorIndex=1, color=palette[1],
-    zoom=1, offsetX=0, offsetY=0, dragging=nil,
+    zoom=1, offsetX=0, offsetY=0, rotation=0, dragging=nil,
+    favorites={ink=true,pencil=true},
     message="Bem-vindo ao Inkora! B: pincel | G: balde | I: conta-gotas",
 }
 
@@ -63,21 +65,71 @@ end
 function app:fitView()
     local l,t,r,b=workspace()
     local aw,ah=r-l-80,b-t-78
-    self.zoom=math.max(0.08,math.min(1,aw/self.doc.width,ah/self.doc.height))
+    local dw,dh=Viewport.bounds(self.doc.width,self.doc.height,self.rotation)
+    self.zoom=math.max(0.08,math.min(1,aw/dw,ah/dh))
     self.offsetX=(l+r-self.doc.width*self.zoom)/2
     self.offsetY=(t+b-self.doc.height*self.zoom)/2
 end
 
 function app:screenToDocument(x,y)
-    return (x-self.offsetX)/self.zoom,(y-self.offsetY)/self.zoom
+    return Viewport.toDocument(x,y,self.doc.width,self.doc.height,
+        self.zoom,self.offsetX,self.offsetY,self.rotation)
+end
+
+function app:documentToScreen(x,y)
+    return Viewport.toScreen(x,y,self.doc.width,self.doc.height,
+        self.zoom,self.offsetX,self.offsetY,self.rotation)
 end
 
 function app:zoomAt(factor,x,y)
     if not onWorkspace(x,y) then return end
     local dx,dy=self:screenToDocument(x,y)
     self.zoom=math.max(0.08,math.min(8,self.zoom*factor))
-    self.offsetX=x-dx*self.zoom
-    self.offsetY=y-dy*self.zoom
+    self.offsetX,self.offsetY=Viewport.reanchor(dx,dy,x,y,
+        self.doc.width,self.doc.height,self.zoom,self.rotation)
+end
+
+-- Rotate the *view* around a screen-space pivot. Document pixels and
+-- exported PNG stay in their original unrotated coordinates.
+function app:rotateAt(deltaDegrees,x,y)
+    if not onWorkspace(x,y) then return end
+    local dx,dy=self:screenToDocument(x,y)
+    self.rotation=(self.rotation+math.rad(deltaDegrees))%(math.pi*2)
+    if math.abs(self.rotation-math.pi*2)<0.000001 then self.rotation=0 end
+    self.offsetX,self.offsetY=Viewport.reanchor(dx,dy,x,y,
+        self.doc.width,self.doc.height,self.zoom,self.rotation)
+end
+
+function app:resetRotation()
+    if self.rotation==0 then return end
+    local l,t,r,b=workspace()
+    local cx,cy=(l+r)/2,(t+b)/2
+    self:rotateAt(-math.deg(self.rotation),cx,cy)
+    self.rotation=0
+end
+
+function app:loadFavorites()
+    local bytes=love.filesystem.read("brush-favorites.txt")
+    if not bytes then return end
+    local ids={}
+    for id in bytes:gmatch("[^\r\n]+") do
+        if Presets.find(id) then ids[id]=true end
+    end
+    self.favorites=ids
+end
+
+function app:toggleFavorite(id)
+    if not Presets.find(id) then return false end
+    if self.favorites[id] then self.favorites[id]=nil
+    else self.favorites[id]=true end
+    local ids={}
+    for _,preset in ipairs(Presets) do
+        if self.favorites[preset.id] then
+            ids[#ids+1]=preset.id
+        end
+    end
+    assert(love.filesystem.write("brush-favorites.txt",table.concat(ids,"\n")))
+    return true
 end
 
 function app:newDocument(w,h)
@@ -278,6 +330,7 @@ function love.load()
     love.graphics.setBackgroundColor(0.15,0.19,0.25)
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
+    app:loadFavorites()
     app:choosePreset("ink")
     app:newDocument(1280,800)
     if love.filesystem.getInfo("brushes/custom-tip.png") then
@@ -291,9 +344,14 @@ function love.load()
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end
     local preview=os.getenv("INKORA_PREVIEW")
-    if preview=="brush" or preview=="layers" or preview=="color" then
+    if preview=="brush" or preview=="layers" or preview=="color"
+        or preview=="rotate" then
         require("tests.preview").seed(app)
-        app.ui.tab=preview
+        if preview=="rotate" then
+            local l,t,r,b=workspace()
+            app:rotateAt(28,(l+r)/2,(t+b)/2)
+            app.ui.tab="brush"
+        else app.ui.tab=preview end
         app._previewName=preview
     end
     if os.getenv("INKORA_TEST")=="1" then
@@ -327,12 +385,17 @@ function love.draw()
     end
     local x,y=app.offsetX,app.offsetY
     local w,h=app.doc.width*app.zoom,app.doc.height*app.zoom
-    love.graphics.setColor(0.05,0.07,0.11,0.22)
-    love.graphics.rectangle("fill",x+9,y+13,w,h)
-    app.doc:draw(x,y,app.zoom)
+    local cx,cy=x+w/2,y+h/2
+    love.graphics.push("all")
+    love.graphics.translate(cx,cy)
+    love.graphics.rotate(app.rotation)
+    love.graphics.translate(-w/2,-h/2)
+    love.graphics.setColor(0.05,0.07,0.11,0.26)
+    love.graphics.rectangle("fill",9,13,w,h)
+    app.doc:draw(0,0,app.zoom)
     if not app.doc.dirty and #app.doc.history==0 then
-        local centerX=x+w/2
-        local centerY=y+h/2
+        local centerX=w/2
+        local centerY=h/2
         love.graphics.setColor(0.15,0.18,0.23,0.84)
         local font=app.ui and app.ui.large or love.graphics.getFont()
         love.graphics.setFont(font)
@@ -345,14 +408,13 @@ function love.draw()
                 centerX-250,centerY+13,500,"center")
         end
     end
-    love.graphics.setColor(0.45,0.50,0.55,0.55)
-    love.graphics.rectangle("line",x-0.5,y-0.5,w+1,h+1)
+    love.graphics.setColor(0.60,0.68,0.77,0.55)
+    love.graphics.rectangle("line",-0.5,-0.5,w+1,h+1)
 
     -- Previa de formas: nao altera a camada antes de soltar o mouse.
     local d=app.dragging
     if d and d.kind=="shape" then
         love.graphics.push("all")
-        love.graphics.translate(x,y)
         love.graphics.scale(app.zoom,app.zoom)
         Brush.shape(nil,d.shape,d.x1,d.y1,d.x2,d.y2,app.color,
             app.brushSize,app.brushOpacity)
@@ -366,8 +428,8 @@ function love.draw()
         sel={x0=left,y0=top,x1=math.max(d.x1,d.x2),y1=math.max(d.y1,d.y2)}
     end
     if sel then
-        local sx=x+sel.x0*app.zoom
-        local sy=y+sel.y0*app.zoom
+        local sx=sel.x0*app.zoom
+        local sy=sel.y0*app.zoom
         local sw=(sel.x1-sel.x0)*app.zoom
         local sh=(sel.y1-sel.y0)*app.zoom
         love.graphics.push("all")
@@ -378,6 +440,7 @@ function love.draw()
         love.graphics.rectangle("line",sx,sy,sw,sh)
         love.graphics.pop()
     end
+    love.graphics.pop() -- rotated canvas transform
     love.graphics.setScissor()
 
     if not app.ui.modal and app.tool~="hand" and app.tool~="fill"
@@ -504,7 +567,9 @@ function love.wheelmoved(_,y)
     if app.ui.modal or y==0 then return end
     local x,my=love.mouse.getPosition()
     if app.ui:mousewheel(x,y) then return end
-    if love.keyboard.isDown("lshift","rshift") then
+    if love.keyboard.isDown("lalt","ralt") then
+        app:rotateAt(y*5,x,my)
+    elseif love.keyboard.isDown("lshift","rshift") then
         app.brushSize=math.max(1,math.min(120,app.brushSize+(y>0 and 2 or -2)))
     else app:zoomAt(1.15^y,x,my) end
 end
@@ -519,6 +584,8 @@ function love.keypressed(key,_,isrepeat)
         app.ui.tab=app.ui.tab=="brush" and "layers" or "brush"
     elseif key=="c" and not ctrl then
         app.ui.tab="color"
+    elseif ctrl and key=="0" then
+        app:resetRotation()
     elseif ctrl and key=="d" then
         app.doc:clearSelection()
         app:statusMessage("Selecao removida.")
@@ -537,6 +604,13 @@ function love.keypressed(key,_,isrepeat)
         elseif key=="escape" then
             app.doc:clearSelection()
             app:statusMessage("Selecao removida.")
+        elseif key=="comma" then
+            local l,t,r,b=workspace()
+            app:rotateAt(-15,(l+r)/2,(t+b)/2)
+        elseif key=="period" then
+            local l,t,r,b=workspace()
+            app:rotateAt(15,(l+r)/2,(t+b)/2)
+        elseif key=="0" then app:resetRotation()
         elseif key=="f" then app:fitView()
         elseif key=="[" then app.brushSize=math.max(1,app.brushSize-2)
         elseif key=="]" then app.brushSize=math.min(120,app.brushSize+2)

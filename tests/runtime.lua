@@ -413,6 +413,65 @@ local function run(app)
         -- minimum supported window dimensions.
         UI.tab="brush"
         love.draw()
+
+        -- Favorites must persist in LÖVE's writable preference directory.
+        local chalkWasFavorite=not not app.favorites.chalk
+        assert(app:toggleFavorite("chalk"),"Pincel favorito nao alternou")
+        local changed=not not app.favorites.chalk
+        assert(changed~=chalkWasFavorite)
+        app:loadFavorites()
+        assert((not not app.favorites.chalk)==changed,
+            "Favoritos nao sobreviveram a recarga")
+        assert(app:toggleFavorite("chalk"))
+        app:loadFavorites()
+        assert((not not app.favorites.chalk)==chalkWasFavorite)
+        UI.favoriteOnly=true
+        UI.tab="brush"
+        love.draw()
+        assert(UI:click(px+25,225),"Filtro de favoritos nao mostrou pinceis")
+        assert(app.presetId=="ink","Filtro escolheu preset errado")
+        UI.favoriteOnly=false
+
+        -- Rotated canvas: cursor->document mapping remains stable at every
+        -- angle and zoom; a native C++ dab must land under the rotated cursor.
+        app:fitView()
+        local oldZoom=app.zoom
+        local anchorX,anchorY=app:documentToScreen(
+            app.doc.width/2,app.doc.height/2)
+        app:rotateAt(37,anchorX,anchorY)
+        assert(math.abs(math.deg(app.rotation)-37)<0.001)
+        local px2,py2=app:documentToScreen(
+            app.doc.width/2,app.doc.height/2)
+        assert(math.abs(px2-anchorX)<0.01 and math.abs(py2-anchorY)<0.01,
+            "Rotacao deslocou o ponto pivot")
+        app:zoomAt(1.4,anchorX,anchorY)
+        local rx,ry=app:screenToDocument(anchorX,anchorY)
+        assert(math.abs(rx-app.doc.width/2)<0.01
+            and math.abs(ry-app.doc.height/2)<0.01,
+            "Zoom em tela rotacionada perdeu a coordenada do desenho")
+        app.tool="brush"
+        app:strokeStart(anchorX,anchorY)
+        assert(app.dragging and app.dragging.kind=="draw")
+        app:strokeEnd(anchorX,anchorY)
+        app.dragging=nil
+        local active=app.doc.layers[app.doc.selected]
+        local img=active.canvas:newImageData()
+        local _,_,_,alpha=img:getPixel(
+            math.floor(app.doc.width/2),math.floor(app.doc.height/2))
+        assert(alpha>0.7,"Pincel nao pintou abaixo do cursor rotacionado")
+        love.draw()
+        app:resetRotation()
+        assert(app.rotation==0,"Reset do giro falhou")
+        local fixedX,fixedY=app:documentToScreen(
+            app.doc.width/2,app.doc.height/2)
+        assert(math.abs(fixedX-anchorX)<0.01
+            and math.abs(fixedY-anchorY)<0.01,
+            "Reset de giro deslocou o centro")
+        app:fitView()
+        assert(math.abs(app.zoom-oldZoom)<0.001)
+        UI.tab="brush"
+        love.draw()
+        print("INKORA_ROTATION_FAVORITES_OK")
         print("INKORA_DESKTOP_UI_BRUSH_LIBRARY_OK")
     end
 

@@ -31,7 +31,8 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 - Área de desenho destacada com mesa escura, tela centralizada, barra compacta de ferramentas e zoom rápido sobre o canvas.
 - Quatro abas funcionais no inspetor lateral: **Pincéis** (biblioteca visual com prévias), **Ajustes**, **Camadas** (miniaturas reais) e **Cor** (anel de matiz e quadrado de saturação/brilho).
 - Oito presets iniciais independentes: Nanquim, Lápis, Marcador, Aerógrafo, Giz, Pincel macio, Pixel e Ponta PNG. Cada preset altera parâmetros **reais** do motor de pintura C++, como ponta, fluxo, espaçamento, dureza, tamanho e opacidade.
-- Canvas com estado inicial orientativo, cursor de pincel proporcional ao tamanho e controles rápidos para tamanho, opacidade e zoom.
+- **Favoritos persistentes:** marque com `*` no cartão do pincel e use o filtro **Favoritos**. As preferências ficam em `brush-favorites.txt` no diretório do Inkora, sem depender de servidor.
+- Canvas com estado inicial orientativo, cursor de pincel proporcional ao tamanho, controles rápidos para tamanho, opacidade, zoom e **rotação da visualização sem alterar os pixels**. Girar preserva a posição do cursor no documento, mesmo com zoom.
 - Painel de camadas com miniaturas atualizadas a partir dos próprios canvases, botões de ordenação, visibilidade, máscaras, clipping e modos de mesclagem.
 - A interface permanece escrita em Lua/LÖVE; o motor C++ v7 continua responsável por pintar, compor, mascarar e fazer clipping. O visual é próprio do Inkora, não uma reprodução dos gráficos proprietários do ibisPaint.
 
@@ -69,6 +70,8 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 | Abrir projeto | Ctrl+O |
 | Exportar PNG | Ctrl+Shift+S |
 | Ajustar ao espaço | F |
+| Girar a visualização | , / . (15°) ou Alt + roda do mouse (5°) |
+| Restaurar giro a 0° | 0 ou Ctrl+0 |
 | Alternar biblioteca / camadas | Tab |
 | Abrir seletor de cores | C |
 | Zoom | Roda do mouse |
@@ -84,6 +87,7 @@ Os projetos e PNGs são gravados no diretório de dados do LÖVE, usando a ident
 
 - `projects/` — projetos editáveis, com manifesto e PNGs de cada camada.
 - `exports/` — imagens PNG exportadas.
+- `brush-favorites.txt` — preferências de pincéis favoritos.
 
 Os caminhos podem ser consultados na pasta de dados do Inkora. O rodapé mostra o documento, a ferramenta e o zoom. O sistema ainda **não** tem diálogo nativo “Salvar como”.
 
@@ -117,7 +121,7 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Interface: objetivo perceptível da próxima versão
 
-**Correção de prioridade:** versões anteriores desenvolveram recursos técnicos sem transformarem suficientemente a experiência visual. Esta revisão altera a organização da área de trabalho, adiciona oito presets funcionais e introduz miniaturas reais de camadas e um seletor de cores HSV. **Ainda faltam** docking completo de painéis, UI otimizada para tela pequena, uma biblioteca profissional de pontas, comparativos visuais com o ibisPaint e testes de usabilidade com artistas. Não declarar equivalência visual ou funcional até validar esses itens.
+**Correção de prioridade:** versões anteriores desenvolveram recursos técnicos sem transformarem suficientemente a experiência visual. Esta revisão altera a organização da área de trabalho, adiciona oito presets funcionais, favoritos persistentes, rotação ancorada do canvas (incluindo desenho/seleção sob giro) e introduz miniaturas reais de camadas e um seletor de cores HSV. **Ainda faltam** docking completo de painéis, UI otimizada para tela pequena, uma biblioteca profissional de pontas, comparativos visuais com o ibisPaint e testes de usabilidade com artistas. Não declarar equivalência visual ou funcional até validar esses itens.
 
 ## Rumo ao motor Lua + C++
 

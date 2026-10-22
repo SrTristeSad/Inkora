@@ -6,7 +6,7 @@
 
 | Componente | Estado atual |
 | --- | --- |
-| Protótipo desktop Lua/LÖVE (canvas e UI) | Reformulação visual inicial com biblioteca de pincéis, HSV e miniaturas; teste manual Windows pendente |
+| Protótipo desktop Lua/LÖVE (canvas e UI) | Biblioteca visual, HSV, miniaturas, favoritos persistentes e canvas rotacionável; teste manual Windows pendente |
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
@@ -45,6 +45,9 @@
 
 ### Fase 3 — Produto multiplataforma
 - [x] Primeira reformulação visual: biblioteca de oito presets funcionais, miniaturas em camadas, seletor HSV, área de pintura central e barra de ferramentas compacta.
+- [x] Favoritos persistentes na biblioteca e filtro funcional de pincéis.
+- [x] Rotação visual do canvas com mouse/pincel/seleção alinhados e zoom ancorado; sem alterar a orientação dos pixels exportados.
+- [ ] Testar usabilidade da rotação com canetas digitais e gestos multitouch reais em Windows.
 - [ ] Evoluir o desktop para nível profissional: painéis móveis, favoritos de pincéis, prévia da ponta importada, opções de caneta digitalizadora, atalhos personalizáveis e UX validada com artistas.
 - [ ] Formatos interoperáveis e documentos complexos.
 - [ ] Reutilizar o mesmo nucleo C++/Lua em Android, com suporte a toque/gestos/caneta.

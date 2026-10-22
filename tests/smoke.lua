@@ -50,4 +50,31 @@ for y=0,1 do
     for x=0,4 do assert(img2:pixel(x,y)[2]==1, "Area aberta incompleta") end
 end
 assert(not fill.apply(img2,1,1,{0,1,0},0), "Mesma cor deve ser no-op")
+
+-- Viewport coordinates must remain reversible under rotations, all zooms
+-- and arbitrary screen offsets (pure Lua, no GPU required).
+local vp=require("src.viewport")
+local function near(a,b) return math.abs(a-b)<0.00001 end
+for _,angle in ipairs({0,math.pi/6,math.pi/2,math.pi,5.4}) do
+    for _,zoom in ipairs({0.08,0.75,1,8}) do
+        for _,xy in ipairs({{0,0},{640,400},{1279.5,799.5},{210,567}}) do
+            local sx,sy=vp.toScreen(xy[1],xy[2],1280,800,zoom,140,-79,angle)
+            local dx,dy=vp.toDocument(sx,sy,1280,800,zoom,140,-79,angle)
+            assert(near(dx,xy[1]) and near(dy,xy[2]),
+                "Viewport inverso falhou em zoom/rotacao")
+            local ox,oy=vp.reanchor(xy[1],xy[2],503,206,
+                1280,800,zoom,angle)
+            local ax,ay=vp.toScreen(xy[1],xy[2],1280,800,zoom,ox,oy,angle)
+            assert(near(ax,503) and near(ay,206),
+                "Zoom/giro deslocou o ponto de ancoragem")
+        end
+    end
+end
+local w,h=vp.bounds(1280,800,math.pi/2)
+assert(near(w,800) and near(h,1280),"BBox de canvas rotacionado incorreto")
+local presets=require("src.presets")
+assert(#presets==8 and presets.find("ink").tip==0 and
+    presets.find("marker").tip==1)
+print("INKORA_VIEWPORT_PRESETS_OK")
+
 print("Inkora: tests de modulos OK")
