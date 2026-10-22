@@ -4,7 +4,7 @@
 
 > **Regra permanente para qualquer IA que continuar o projeto:** leia **[AGENTS.md](AGENTS.md)** e **[docs/ROADMAP.md](docs/ROADMAP.md)**. **TRABALHA, IA.** Não desvie do objetivo para criar outro editor genérico.
 
-> **Situação real:** a versão existente é apenas um protótipo **Lua/LÖVE**. Ainda **não** há motor C++ próprio, ponte Lua ↔ C++ nem reconstrução comprovada do comportamento do ibisPaint. A prioridade seguinte é corrigir essa arquitetura, não maquiar o MVP.
+> **Situação atual:** existe agora o primeiro **motor raster C++ v1 + ponte LuaJIT FFI**, integrado ao pincel e à borracha. **Não** é ainda um motor profissional nem um clone completo: a interface e as demais ferramentas seguem no protótipo Lua/LÖVE. A ponte faz upload da camada completa para a GPU durante os traços, o que deve ser otimizado por regiões/tiles.
 
 **Referências obrigatórias:** [ReveriePaint](https://github.com/LanRhyme/ReveriePaint) (C++/Krita; GPL-3.0) e [Klecks](https://github.com/bitbof/klecks) (ferramentas e UX; MIT). Integração depende de auditoria de código e licença.
 
@@ -17,7 +17,7 @@
 3. Em **Artifacts**, baixe **Inkora-Windows-portable**.
 4. Extraia o ZIP completo (incluindo as DLLs) e abra **Inkora.exe**.
 
-A compilação é automática no GitHub Actions. O pacote Windows portátil já contém o LÖVE; não precisa instalar um runtime separado. Artefatos do Actions podem expirar, mas um novo push no `main` gera um novo pacote.
+A compilação é automática no GitHub Actions. O pacote Windows portátil inclui o LÖVE **e `inkora_core.dll` (C++)**, carregado por LuaJIT FFI. Não precisa instalar um runtime separado. Artefatos do Actions podem expirar, mas um novo push no `main` gera um novo pacote.
 
 ### Executar o código-fonte em LÖVE
 
@@ -82,6 +82,11 @@ Inkora/
 │   ├── brush.lua           # Motor de pincel raster inicial
 │   ├── ui.lua              # Interface desktop em Lua
 │   └── palette.lua         # Paleta de cores
+├── native/                # Motor C++ independente (CMake)
+│   ├── inkora_core.h       # Contrato ABI C v1
+│   └── inkora_core.cpp     # Pincel raster nativo
+├── src/native.lua          # Ponte LuaJIT FFI
+├── docs/REVERSE_ENGINEERING.md
 ├── .gitignore
 └── README.md
 ```
@@ -95,7 +100,9 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Rumo ao motor Lua + C++
 
-**Próxima entrega prioritária:** auditoria técnica das duas bases, matriz comparativa de comportamentos do ibisPaint, compilação de um módulo gráfico em C++ e integração Lua ↔ C++ comprovada por testes no Windows. Veja o [roadmap vinculante](docs/ROADMAP.md).
+**Motor implementado nesta etapa:** `native/inkora_core.cpp` expõe uma API C versionada, que `src/native.lua` chama por LuaJIT FFI. O pincel/borracha já utiliza C++ se a DLL estiver presente. Testes C++ exercitam alpha, pressão interpolada, espaçamento e validação de buffers. O LÖVE no CI exercita a ponte real no Linux; o Windows é compilado com o C++ nativo. Consulte a [auditoria técnica](docs/REVERSE_ENGINEERING.md) e o [roadmap](docs/ROADMAP.md).
+
+**Próxima prioridade:** uploads parciais/tiles, dureza e espaçamento expostos na interface, entrada de pressão de mesa digitalizadora, modos de mesclagem e seleção.
 
 ## Limitações atuais e próximos passos
 

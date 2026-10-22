@@ -3,13 +3,25 @@
 local Doc=require("src.document")
 local Brush=require("src.brush")
 local Fill=require("src.fill")
+local Native=require("src.native")
 
 local function close(a,b,tolerance)
     return math.abs(a-b) <= (tolerance or 0.18)
 end
 
 local function run()
+    local requireNative=os.getenv("INKORA_REQUIRE_NATIVE")=="1"
+    if requireNative then
+        assert(Native.available(),"Motor C++ deveria estar carregado: "..tostring(Native.error))
+    end
     local d=Doc.new(96,64,"Teste GPU")
+    local stroke=Brush.beginStroke(d.layers[1].canvas)
+    if requireNative then assert(stroke,"Ponte Lua/C++ nao iniciou stroke") end
+    Brush.segment(d.layers[1].canvas,10.5,52.5,60.5,52.5,{0,0.2,1},7,1,false,stroke)
+    local first=d.layers[1].canvas:newImageData()
+    local _,_,bb,aa=first:getPixel(30,52)
+    assert(bb>0.5 and aa>0.5,"Stroke Lua/C++ nao apareceu no canvas")
+    if stroke then print("INKORA_LUA_CPP_BRIDGE_OK") end
     Brush.segment(d.layers[1].canvas,12,12,38,12,{1,0,0},9,1,false)
     Brush.shape(d.layers[1].canvas,"line",8,40,50,40,{0,1,0},3,1)
     Brush.shape(d.layers[1].canvas,"rectangle",10,18,38,30,{0,0,1},2,1)

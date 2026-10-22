@@ -13,13 +13,13 @@ Reconstruir **funcionalmente o ibisPaint** por engenharia reversa do comportamen
 - **LÖVE** pode servir de hospedeiro/prototipo Lua, **nao substitui** a construcao/integracao do motor C++ do Inkora.
 
 ## REALIDADE ATUAL (NAO INVENTAR PROGRESSO)
-O repositorio possui um **prototipo inteiramente Lua/LÖVE**, com pinceis simples, camadas e algumas ferramentas. **Ainda nao ha motor C++ proprio, ponte Lua↔C++, nem estudo aprofundado de equivalencia com o ibisPaint.** A existencia de funcionalidades superficiais nao cumpre a missao. Nao descreva o Inkora como clone completo ou motor profissional antes de provar.
+O repositorio possui um prototipo Lua/LÖVE e **um primeiro motor C++ raster integrado via LuaJIT FFI para pincel/borracha**. Nao ha ainda equivalencia comprovada de pincel com ibisPaint, nem sistema de tiles, pressao nativa do stylus ou filtros nativos. A existencia de um pincel C++ nao cumpre a missao. Nao descreva o Inkora como clone completo ou motor profissional.
 
 ## ORDEM DE TRABALHO OBRIGATORIA
 1. Inspecione o codigo existente e consulte **docs/ROADMAP.md**; preserve o que ja funciona.
 2. Faça uma matriz de comportamento do ibisPaint: ferramenta/gesto, resultados, casos extremos e teste comparativo. Identifique o que e **observado** versus **estimado**; nao invente descoberta de engenharia reversa.
 3. Audite o codigo real de ReveriePaint e Klecks, licencas e dependencias, antes de escolher componentes.
-4. **Prioridade de implementacao: modulo C++ compilavel + API Lua ↔ C++ + um pincel real passando pela ponte.** Depois motor de pincel, camadas, composicao, filtros, selecao e UX.
+4. **Motor C++ v1 + API Lua ↔ C++ + pincel integrado implementados**: preserve-os, meca-os e evolua para dirty tiles, parametros profissionais, camadas, composicao, filtros, selecao e UX. Nunca volte ao motor unicamente Lua.
 5. Entregue sempre **codigo executavel**, teste automatico e build Windows, com logs honestos e commits no repositorio. Se houver falha, corrija ou reporte; **nao anuncie sucesso sem verificar**.
 6. Atualize o roadmap e o README com o que foi **realmente** construido, o que continua faltando e o proximo passo.
 

@@ -20,10 +20,15 @@ jobs:
         run: find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
       - name: Smoke test modules
         run: lua5.1 tests/smoke.lua
+      - name: Compile native C++ engine
+        run: |
+          cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --parallel
+          ctest --test-dir build/native --output-on-failure
       - name: Install graphics test dependencies
         run: sudo apt-get install -y love xvfb
-      - name: Real LÖVE graphics test (virtual display)
-        run: INKORA_TEST=1 xvfb-run -a timeout 45s love .
+      - name: Real LÖVE + C++ bridge test (virtual display)
+        run: INKORA_CORE_PATH="$PWD/build/native/libinkora_core.so" INKORA_REQUIRE_NATIVE=1 INKORA_TEST=1 xvfb-run -a timeout 45s love .
 
   windows-portable:
     name: Build portable Windows application
@@ -31,6 +36,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Compile Windows C++ engine
+        shell: pwsh
+        run: |
+          cmake -S native -B build/native -A x64
+          cmake --build build/native --config Release
+          ctest --test-dir build/native -C Release --output-on-failure
       - name: Bundle LÖVE runtime and Inkora
         shell: pwsh
         run: |
@@ -42,6 +53,7 @@ jobs:
           if (-not $runtime) { throw 'LÖVE runtime not found in archive' }
           New-Item -ItemType Directory -Path 'dist/Inkora' -Force | Out-Null
           Copy-Item -Path "$($runtime.FullName)/*" -Destination 'dist/Inkora' -Recurse -Force
+          Copy-Item -Path 'build/native/Release/inkora_core.dll' -Destination 'dist/Inkora/inkora_core.dll' -Force
           Compress-Archive -Path 'main.lua','conf.lua','src' -DestinationPath 'dist/Inkora.love' -Force
           $loveExe = [System.IO.File]::ReadAllBytes((Resolve-Path 'dist/Inkora/love.exe'))
           $game = [System.IO.File]::ReadAllBytes((Resolve-Path 'dist/Inkora.love'))

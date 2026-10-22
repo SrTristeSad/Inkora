@@ -90,12 +90,13 @@ function app:strokeStart(x,y)
         return
     end
     self.doc:checkpoint()
+    local nativeStroke=Brush.beginStroke(layer.canvas)
     self.dragging={
-        kind="draw",x=dx,y=dy,
+        kind="draw",x=dx,y=dy,nativeStroke=nativeStroke,
         smoother=Stabilizer.new(dx,dy,self.stabilization),
     }
     Brush.segment(layer.canvas,dx,dy,dx,dy,self.color,self.brushSize,
-        self.brushOpacity,self.tool=="eraser")
+        self.brushOpacity,self.tool=="eraser",self.dragging.nativeStroke)
 end
 
 function app:strokeMove(x,y)
@@ -105,7 +106,7 @@ function app:strokeMove(x,y)
     local dx,dy=drag.smoother:push(targetX,targetY)
     local layer=self.doc.layers[self.doc.selected]
     Brush.segment(layer.canvas,drag.x,drag.y,dx,dy,self.color,
-        self.brushSize,self.brushOpacity,self.tool=="eraser")
+        self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke)
     drag.x,drag.y=dx,dy
 end
 
@@ -115,7 +116,7 @@ function app:strokeEnd(x,y)
     local dx,dy=self:screenToDocument(x,y)
     dx,dy=drag.smoother:finish(dx,dy)
     Brush.segment(self.doc.layers[self.doc.selected].canvas,drag.x,drag.y,
-        dx,dy,self.color,self.brushSize,self.brushOpacity,self.tool=="eraser")
+        dx,dy,self.color,self.brushSize,self.brushOpacity,self.tool=="eraser",drag.nativeStroke)
 end
 
 function app:shapeStart(x,y)
@@ -182,6 +183,11 @@ function love.load()
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
     app:newDocument(1280,800)
+    if Brush.nativeAvailable() then
+        app:statusMessage("Motor C++ v1 ativo | LuaJIT FFI | projeto Inkora")
+    else
+        app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
+    end
     if os.getenv("INKORA_TEST")=="1" then
         local ok,err=pcall(function()
             love.draw()

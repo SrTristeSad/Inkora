@@ -1,4 +1,9 @@
 local Brush = {}
+local Native = require("src.native")
+
+function Brush.nativeAvailable() return Native.available() end
+function Brush.nativeError() return Native.error end
+function Brush.beginStroke(canvas) return Native.beginStroke(canvas) end
 
 local function style(color, diameter, opacity, eraser)
     love.graphics.setLineStyle("smooth")
@@ -15,7 +20,11 @@ local function style(color, diameter, opacity, eraser)
 end
 
 -- Interpolacao de discos evita falhas quando o mouse se move rapidamente.
-function Brush.segment(canvas, x1, y1, x2, y2, color, diameter, opacity, eraser)
+function Brush.segment(canvas, x1, y1, x2, y2, color, diameter, opacity, eraser, session)
+    if session then
+        Native.segment(session,x1,y1,x2,y2,color,diameter,opacity,eraser)
+        return
+    end
     local radius = math.max(0.5, diameter/2)
     local distance = math.sqrt((x2-x1)^2 + (y2-y1)^2)
     local steps = math.max(1, math.ceil(distance / math.max(0.75,radius*0.45)))

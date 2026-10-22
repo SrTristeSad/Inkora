@@ -8,21 +8,21 @@
 | --- | --- |
 | Protótipo desktop Lua/LÖVE (canvas e UI) | Implementado; requer testes de uso no Windows |
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
-| Engenharia reversa funcional documentada do ibisPaint | **Pendente** |
-| Auditoria detalhada de ReveriePaint e Klecks | **Pendente** |
-| Motor gráfico Inkora em C++ | **Pendente** |
-| Ponte Lua ↔ C++ com testes | **Pendente** |
-| Build Windows integrando C++ e Lua | **Pendente** |
+| Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
+| Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
+| Motor gráfico Inkora em C++ | **MVP raster RGBA8 com CMake e testes nativos** |
+| Ponte Lua ↔ C++ com testes | **LuaJIT FFI v1 (pincel/borracha) com teste gráfico de integração no CI** |
+| Build Windows integrando C++ e Lua | **CI configurado para DLL C++ + LÖVE; validar resultado da execução** |
 | Android sobre o mesmo núcleo | **Futuro** |
 
 ## Ordem de execução
 
 ### Fase 1 — Fundacao correta (proxima prioridade)
-- [ ] Criar **docs/REVERSE_ENGINEERING.md**, matriz de equivalencia observada do ibisPaint: gestos, desenho, resposta, layer blend e casos extremos, com evidencia e nivel de confianca.
-- [ ] Auditar arquivos e APIs reais de **ReveriePaint** (C++/Krita/GPL-3.0) e **Klecks** (MIT/TypeScript) e registrar integracao possivel versus reimplementacao.
-- [ ] Definir uma API versionada **Lua ↔ C++** para rasterizacao em imagens RGBA, sem dependencias de Android na logica.
-- [ ] Compilar um modulo C++ nativo no CI para Windows e exercita-lo por Lua em um teste.
-- [ ] Mover **um pincel real** do prototipo Lua para C++ com trajetoria, espessura, espacamento, alpha e testes visuais/regressao. Nao remover o caminho Lua antigo antes de passar testes.
+- [x] Criar **docs/REVERSE_ENGINEERING.md**, matriz de equivalencia observada do ibisPaint: gestos, desenho, resposta, layer blend e casos extremos, com evidencia e nivel de confianca.
+- [x] Auditar inicialmente arquivos e APIs reais de **ReveriePaint** (C++/Krita/GPL-3.0) e **Klecks** (MIT/TypeScript) e registrar integracao possivel versus reimplementacao.
+- [x] Definir uma API versionada **Lua ↔ C++** para rasterizacao em imagens RGBA, sem dependencias de Android na logica.
+- [ ] Compilar modulo C++ no CI Windows e testar ponte em LÖVE/Linux (CI deve confirmar execução).
+- [x] Mover **um pincel real** do prototipo Lua para C++ com trajetoria, espessura, espacamento, alpha e testes visuais/regressao. Nao remover o caminho Lua antigo antes de passar testes.
 
 ### Fase 2 — Motor de pintura
 - [ ] Pinceis: dureza, ponta/textura, dinamica, opacidade, fluxo, estabilidade e pressao quando disponivel.
