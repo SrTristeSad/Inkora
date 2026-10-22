@@ -82,7 +82,7 @@ end
 function Native.registerBlank(canvas)
     if not canvas then return end
     local w,h=canvas:getDimensions()
-    layerCaches[canvas]={canvas=canvas,width=w,height=h,tiles={},blank=true}
+    layerCaches[canvas]={width=w,height=h,tiles={},blank=true}
 end
 
 function Native.stats()
@@ -95,7 +95,7 @@ function Native.resetStats()
     for k in pairs(metrics) do metrics[k]=0 end
 end
 
-local function getTile(cache,tx,ty)
+local function getTile(cache,canvas,tx,ty)
     local key=tx..":"..ty
     local tile=cache.tiles[key]
     if tile then
@@ -110,7 +110,7 @@ local function getTile(cache,tx,ty)
         data=love.image.newImageData(w,h,"rgba8")
         metrics.zeroTiles=metrics.zeroTiles+1
     else
-        data=cache.canvas:newImageData(1,1,x,y,w,h)
+        data=canvas:newImageData(1,1,x,y,w,h)
         metrics.readbacks=metrics.readbacks+1
         metrics.readbackPixels=metrics.readbackPixels+w*h
     end
@@ -127,7 +127,7 @@ function Native.beginStroke(canvas,settings)
     local cache=layerCaches[canvas]
     if not cache then
         local w,h=canvas:getDimensions()
-        cache={canvas=canvas,width=w,height=h,tiles={}}
+        cache={width=w,height=h,tiles={}}
         layerCaches[canvas]=cache
     end
     return {cache=cache,canvas=canvas,settings=settings or {},
@@ -217,7 +217,7 @@ function Native.segment(session,x0,y0,x1,y1,color,diameter,opacity,eraser,pressu
     if left<=right and top<=bottom then
         for ty=math.floor(top/TILE_SIZE),math.floor(bottom/TILE_SIZE) do
             for tx=math.floor(left/TILE_SIZE),math.floor(right/TILE_SIZE) do
-                local tile=getTile(cache,tx,ty)
+                local tile=getTile(cache,session.canvas,tx,ty)
                 local dirty,state=paintTile(session,tile,x0,y0,x1,y1,color,diameter,
                     opacity,eraser,pressure0,pressure1,initial)
                 newState=state
