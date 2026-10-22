@@ -928,7 +928,7 @@ function app:importGalleryPNG(file)
         local w,h=data:getDimensions()
         assert(w>=1 and h>=1 and w<=4096 and h<=4096,
             "Imagem deve ter no maximo 4096 x 4096 pixels")
-        local name=file:getFilename():gsub("\\\\","/"):match("([^/]+)%.%w+$") or "Imagem"
+        local name=file:getFilename():gsub(string.char(92),"/"):match("([^/]+)%.%w+$") or "Imagem"
         self:newDocument(w,h,name)
         self.doc:importPNG(file)
         self.doc:save(name)
