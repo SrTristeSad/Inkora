@@ -87,6 +87,63 @@ local function parseRasterHeader(blob,canvasW,canvasH)
     }
 end
 
+
+-- The public IPV research describes a 0300/0600 layer-set operation.
+-- Its first two nested 0300/0603 groups contain IDs before and after
+-- the edit. Parsing is intentionally conservative: unknown arrangements
+-- do not alter the existing ID-based fallback.
+local function readLayerIdGroup(bytes,pos,last)
+    if pos+3>last then return nil end
+    local count=u32(bytes,pos)
+    if count<1 or count>64 then return nil end
+    local ids,seen={},{}
+    local ended=false
+    pos=pos+4
+    for index=1,count do
+        if pos+15>last or
+            u16(bytes,pos)~=0x0300 or
+            u16(bytes,pos+2)~=0x0603 or
+            u32(bytes,pos+4)~=4 or
+            u32(bytes,pos+12)~=U32-12 then
+            return nil
+        end
+        local id=u32(bytes,pos+8)
+        if id==0xFFFFFFFF then
+            if index~=count then return nil end
+            ended=true
+        else
+            if seen[id] or id>65535 then return nil end
+            seen[id]=true
+            ids[#ids+1]=id
+        end
+        pos=pos+16
+    end
+    if not ended then return nil end
+    return ids,pos
+end
+
+local function readLayerSetAfter(bytes,start,length)
+    if length<16 then return nil end
+    local first=start+12
+    local last=start+length-1
+    local scanEnd=math.min(last-15,first+4096)
+    local pos=first
+    local groups=0
+    while pos<=scanEnd do
+        local ids,nextPos=readLayerIdGroup(bytes,pos,last)
+        if ids then
+            groups=groups+1
+            if groups==2 then return ids end
+            pos=nextPos
+        else
+            -- Scalars between groups are 32-bit. Never search inside a
+            -- nested group or accept an unvalidated record as evidence.
+            pos=pos+4
+        end
+    end
+    return nil
+end
+
 function IPV.inspect(data)
     assert(type(data)=="string","IPV: bytes invalidos")
     assert(#data>=12,"IPV: cabecalho incompleto")
@@ -100,6 +157,7 @@ function IPV.inspect(data)
     local latest={}
     local layerSnapshots=0
     local unrecognizedLayers=false
+    local layerSet=nil
     while pos<=#data do
         count=count+1
         assert(count<=MAX_RECORDS,"IPV: registros demais")
@@ -120,6 +178,9 @@ function IPV.inspect(data)
                 "IPV: dimensoes invalidas")
             width,height=w,h
             sawHeader=true
+        elseif major==0x0300 and sub==0x0600 then
+            -- Only the latest layer-set operation describes the final order.
+            layerSet=readLayerSetAfter(data,payload,length)
         elseif major==0x0100 and sub==0x0500 then
             assert(length>=22,"IPV: snapshot truncado")
             local layer=u32(data,payload+8)
@@ -148,7 +209,6 @@ function IPV.inspect(data)
                     latest[layer]=data:sub(blobStart,blobStart+imageLength-1)
                 else
                     latest[layer]=false
-                    unrecognizedLayers=true
                 end
             end
         end
@@ -161,16 +221,32 @@ function IPV.inspect(data)
     assert(iw==width and ih==height,
         "IPV: dimensoes da imagem divergem do canvas")
     local layers={}
-    for id,blob in pairs(latest) do
-        if blob then layers[#layers+1]={id=id,blob=blob}
-        else unrecognizedLayers=true end
+    if layerSet then
+        -- A removed layer may still have a historical snapshot. Use the
+        -- latest explicit "after" set instead of resurrecting those layers.
+        -- A missing or unsupported ACTIVE snapshot triggers flattened fallback.
+        for _,id in ipairs(layerSet) do
+            local blob=latest[id]
+            if type(blob)=="string" then
+                layers[#layers+1]={id=id,blob=blob}
+            else
+                unrecognizedLayers=true
+            end
+        end
+    else
+        -- Older/unknown logs keep the existing conservative ID estimate.
+        for id,blob in pairs(latest) do
+            if blob then layers[#layers+1]={id=id,blob=blob}
+            else unrecognizedLayers=true end
+        end
+        table.sort(layers,function(a,b)return a.id<b.id end)
     end
-    table.sort(layers,function(a,b)return a.id<b.id end)
     return {
         width=width,height=height,png=png,
         snapshots=snapshots,records=count,flattened=true,
         rasterLayers=layers,layerSnapshots=layerSnapshots,
         incompleteRaster=unrecognizedLayers,
+        layerOrderSource=layerSet and "layer-list" or "id-estimate",
     }
 end
 
