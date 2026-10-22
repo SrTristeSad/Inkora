@@ -344,6 +344,7 @@ function UI:drawToolbar(app,w,h,right)
     end
 
     local actions={
+        {"Galeria",function() app:returnToGallery() end},
         {"Novo",function() self:askNew(app) end},
         {"Abrir",function() self:askOpen(app) end},
         {"Salvar",function() if app.doc.projectKey then
@@ -352,7 +353,7 @@ function UI:drawToolbar(app,w,h,right)
         {"Desf.",function() app.doc:undo() end},
         {"Ref.",function() app.doc:redo() end}
     }
-    local start=right-466
+    local start=right-543
     for i,a in ipairs(actions) do
         self:button(start+(i-1)*77,13,71,37,a[1],a[2],i==3 and "primary" or "ghost")
     end

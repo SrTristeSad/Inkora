@@ -9,6 +9,7 @@ local Presets = require("src.presets")
 local Profiles = require("src.brush_profiles")
 local Viewport = require("src.viewport")
 local Tablet = require("src.tablet")
+local Startup = require("src.startup")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
@@ -23,6 +24,7 @@ local app = {
     fillTolerance=0.02, colorIndex=1, color=palette[1],
     zoom=1, offsetX=0, offsetY=0, rotation=0, dragging=nil,
     favorites={ink=true,pencil=true},
+    screen="editor",startup=nil,
     message="Bem-vindo ao Inkora! B: pincel | G: balde | I: conta-gotas",
 }
 
@@ -201,8 +203,8 @@ function app:toggleFavorite(id)
     return true
 end
 
-function app:newDocument(w,h)
-    self.doc=Document.new(w or 1280,h or 800,"Novo desenho")
+function app:newDocument(w,h,name)
+    self.doc=Document.new(w or 1280,h or 800,name or "Novo desenho")
     self.dragging=nil
     self:fitView()
     self:statusMessage(("Novo documento: %d x %d"):format(self.doc.width,self.doc.height))
@@ -212,6 +214,57 @@ function app:saveProject(name)
     local ok,result=pcall(function()return self.doc:save(name)end)
     if ok then self:statusMessage("Projeto salvo em "..result)
     else self:statusMessage("Falha ao salvar: "..tostring(result)) end
+    return ok
+end
+
+-- Artwork flow follows title -> My Gallery -> canvas size -> native editor.
+-- Gallery and title do not change the Lua/C++ painting engine.
+function app:createArtwork(w,h,name)
+    local previous=self.doc
+    local ok,err=pcall(function()
+        self:newDocument(w,h,name~="" and name or "Meu desenho")
+        self.doc:save(self.doc.name) -- new blank works already exist in gallery
+    end)
+    if not ok then
+        self.doc=previous
+        self.startup.error="Erro ao criar desenho: "..tostring(err)
+        return false
+    end
+    self.screen="editor"
+    self:statusMessage("Tela criada! Comece a desenhar e volte pela Galeria.")
+    return true
+end
+
+function app:openArtwork(key)
+    local ok,err=pcall(function()self.doc=Document.load(key)end)
+    if not ok then
+        self.startup.error="Nao foi possivel abrir: "..tostring(err)
+        return false
+    end
+    self.screen="editor"
+    self.dragging=nil
+    self.rotation=0
+    self:fitView()
+    self:statusMessage("Obra aberta: "..self.doc.name)
+    return true
+end
+
+function app:returnToGallery()
+    if self.doc and (self.doc.dirty or not self.doc.projectKey) then
+        if not self:saveProject(self.doc.name) then
+            self:statusMessage("Erro ao salvar. A galeria nao foi aberta.")
+            return false
+        end
+    end
+    self.dragging=nil
+    self.startup:openGallery(self)
+    return true
+end
+
+function app:goHome()
+    if self.screen=="editor" and not self:returnToGallery() then return false end
+    self.screen="home"
+    return true
 end
 
 function app:openProject(key)
@@ -446,6 +499,8 @@ function love.load()
     love.graphics.setBackgroundColor(0.15,0.19,0.25)
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
+    app.startup=Startup.new()
+    app.startup:refreshGallery()
     local savedCurve=love.filesystem.read("pen-pressure-curve.txt")
     for _,curve in ipairs(Tablet.curves) do
         if savedCurve==curve then app.pressureCurve=curve;break end
@@ -465,6 +520,12 @@ function love.load()
         app:statusMessage("Prototipo Lua (C++ ausente): "..tostring(Brush.nativeError()))
     end
     local preview=os.getenv("INKORA_PREVIEW")
+    -- Existing native test/preview modes still enter the editor directly.
+    app.screen=(os.getenv("INKORA_TEST")=="1" or
+        (preview and preview~="home" and preview~="gallery"
+        and preview~="create")) and "editor" or "home"
+    if preview=="gallery" then app.startup:openGallery(app)
+    elseif preview=="create" then app.startup:openCreate(app) end
     if preview=="brush" or preview=="layers" or preview=="color"
         or preview=="rotate" or preview=="settings"
         or preview=="stabilization" or preview=="direction"
@@ -501,6 +562,8 @@ function love.load()
             app:statusMessage("Estabilizacao adaptativa - previa em tempo real")
         else app.ui.tab=preview end
         app._previewName=preview
+    elseif preview=="home" or preview=="gallery" or preview=="create" then
+        app._previewName=preview
     end
     if os.getenv("INKORA_TEST")=="1" then
         local ok,err=pcall(function()
@@ -516,7 +579,31 @@ function love.load()
     end
 end
 
+local function saveStartupScreenshot(app)
+    if app._previewName and not app._captureQueued then
+        app._captureQueued=true
+        local filename="Inkora-Preview-"..app._previewName..".png"
+        love.graphics.captureScreenshot(function(pixels)
+            local ok,err=love.filesystem.write(filename,
+                pixels:encode("png"):getString())
+            if ok then
+                print("INKORA_SCREENSHOT_OK "..love.filesystem.getSaveDirectory()
+                    .."/"..filename)
+                love.event.quit(0)
+            else
+                io.stderr:write("INKORA_SCREENSHOT_FAILED "..tostring(err).."\n")
+                love.event.quit(1)
+            end
+        end)
+    end
+end
+
 function love.draw()
+    if app.screen~="editor" then
+        app.startup:draw(app)
+        saveStartupScreenshot(app)
+        return
+    end
     love.graphics.clear(0.11,0.12,0.16,1)
     local l,t,r,b=workspace()
     love.graphics.setScissor(l,t,r-l,b-t)
@@ -617,26 +704,15 @@ function love.draw()
         love.graphics.pop()
     end
     app.ui:draw(app)
-    if app._previewName and not app._captureQueued then
-        app._captureQueued=true
-        local filename="Inkora-Preview-"..app._previewName..".png"
-        love.graphics.captureScreenshot(function(pixels)
-            local ok,err=love.filesystem.write(filename,
-                pixels:encode("png"):getString())
-            if ok then
-                print("INKORA_SCREENSHOT_OK "..love.filesystem.getSaveDirectory()
-                    .."/"..filename)
-                love.event.quit(0)
-            else
-                io.stderr:write("INKORA_SCREENSHOT_FAILED "..tostring(err).."\n")
-                love.event.quit(1)
-            end
-        end)
-    end
+    saveStartupScreenshot(app)
 end
 
 function love.mousepressed(x,y,button,istouch)
     if istouch then return end
+    if app.screen~="editor" then
+        if button==1 then app.startup:click(x,y) end
+        return
+    end
     if button==1 and app.ui:click(x,y) then return end
     if not onWorkspace(x,y) or app.ui.modal then return end
     if button==2 or (button==1 and
@@ -653,7 +729,7 @@ function love.mousepressed(x,y,button,istouch)
 end
 
 function love.mousemoved(x,y,dx,dy,istouch)
-    if istouch then return end
+    if istouch or app.screen~="editor" then return end
     if app.ui:mousemoved(x,y) then return end
     if not app.dragging then return end
     if app.dragging.kind=="pan" then
@@ -666,7 +742,7 @@ function love.mousemoved(x,y,dx,dy,istouch)
 end
 
 function love.mousereleased(x,y,button,istouch)
-    if istouch then return end
+    if istouch or app.screen~="editor" then return end
     if button==1 then
         app.ui:mousereleased()
         if app.dragging and app.dragging.kind=="draw" then
@@ -685,6 +761,10 @@ end
 -- LÖVE touch events supply pressure when the device reports it.
 -- This does not replace WinTab/Windows Ink tablet integration.
 function love.touchpressed(id,x,y,dx,dy,pressure)
+    if app.screen~="editor" then
+        app.startup:click(x,y)
+        return
+    end
     if app.activeTouch then return end
     app.activeTouch=id
     if app.ui:click(x,y) then return end
@@ -698,7 +778,7 @@ function love.touchpressed(id,x,y,dx,dy,pressure)
 end
 
 function love.touchmoved(id,x,y,dx,dy,pressure)
-    if id~=app.activeTouch then return end
+    if app.screen~="editor" or id~=app.activeTouch then return end
     if app.ui:mousemoved(x,y) then return end
     if app.dragging and app.dragging.kind=="pan" then
         app.offsetX=app.offsetX+dx
@@ -713,7 +793,7 @@ function love.touchmoved(id,x,y,dx,dy,pressure)
 end
 
 function love.touchreleased(id,x,y,dx,dy,pressure)
-    if id~=app.activeTouch then return end
+    if app.screen~="editor" or id~=app.activeTouch then return end
     app.ui:mousereleased()
     if app.dragging and app.dragging.kind=="draw" then
         app:strokeEnd(x,y,pressure)
@@ -727,6 +807,10 @@ function love.touchreleased(id,x,y,dx,dy,pressure)
 end
 
 function love.wheelmoved(_,y)
+    if app.screen~="editor" then
+        if app.screen=="gallery" then app.startup:wheel(y) end
+        return
+    end
     if app.ui.modal or y==0 then return end
     local x,my=love.mouse.getPosition()
     if app.ui:mousewheel(x,y) then return end
@@ -738,6 +822,14 @@ function love.wheelmoved(_,y)
 end
 
 function love.keypressed(key,_,isrepeat)
+    if app.screen~="editor" then
+        app.startup:keypressed(app,key)
+        return
+    end
+    if key=="escape" and not app.ui.modal then
+        app:returnToGallery()
+        return
+    end
     if app.ui:keypressed(app,key) then return end
     local ctrl=love.keyboard.isDown("lctrl","rctrl")
     local shift=love.keyboard.isDown("lshift","rshift")
@@ -787,10 +879,13 @@ function love.keypressed(key,_,isrepeat)
 end
 
 function love.textinput(text)
-    app.ui:textinput(text)
+    if app.screen~="editor" then
+        if app.screen=="create" then app.startup:textinput(text) end
+    else app.ui:textinput(text) end
 end
 
 function love.filedropped(file)
+    if app.screen~="editor" then return end
     if not file:getFilename():lower():match("%.png$") then
         app:statusMessage("Somente arquivos PNG podem ser importados.")
         return
@@ -813,15 +908,18 @@ function love.filedropped(file)
 end
 
 function love.resize()
-    if app.doc then app:fitView() end
+    if app.screen=="editor" and app.doc then app:fitView() end
 end
 
 function love.update()
     local now=love.timer.getTime()
     Tablet.poll(now)
     app.sampledPressure=Tablet.pressure(now)
-    if app.doc then
+    if app.screen=="editor" and app.doc then
         love.window.setTitle("Inkora | "..app.doc.name..(app.doc.dirty and " *" or ""))
+    else
+        love.window.setTitle("Inkora | "..(app.screen=="home" and "Inicio"
+            or app.screen=="gallery" and "Minha galeria" or "Novo desenho"))
     end
 end
 
