@@ -250,6 +250,16 @@ function app:loadBrushMask(bytes,persist)
     self:statusMessage(("Ponta personalizada: %d x %d"):format(mask.width,mask.height))
 end
 
+-- The C++ brush reports the exact uploaded region. When native drawing
+-- is unavailable, invalidate fully rather than guessing a bounding box.
+function app:markBrushComposite(drag)
+    if drag and drag.nativeStroke and Native.lastUpload then
+        self.doc:markCompositeDirty(Native.lastUpload)
+    else
+        self.doc:markCompositeDirty()
+    end
+end
+
 function app:strokeStart(x,y,pressure)
     local dx,dy=self:screenToDocument(x,y)
     if not insideDocument(self.doc,dx,dy) then return end
@@ -266,7 +276,7 @@ function app:strokeStart(x,y,pressure)
         self:statusMessage("Selecao e Alpha Lock exigem o motor C++ v6.")
         return
     end
-    self.doc:checkpoint()
+    self.doc:checkpoint(true)
     local nativeStroke=Brush.beginStroke(layer.canvas,{
         hardness=self.brushHardness,spacing=self.brushSpacing,
         tip=self.brushTip,aspect=0.3,
@@ -290,6 +300,7 @@ function app:strokeStart(x,y,pressure)
     Brush.segment(layer.canvas,dx,dy,dx,dy,self.color,self.brushSize,
         self.brushOpacity,self.tool=="eraser",self.dragging.nativeStroke,
         self.dragging.pressure,self.dragging.pressure)
+    self:markBrushComposite(self.dragging)
 end
 
 function app:strokeMove(x,y,pressure,dt)
@@ -308,7 +319,7 @@ function app:strokeMove(x,y,pressure,dt)
         drag.pressure,nextPressure)
     drag.pressure=nextPressure
     drag.x,drag.y=dx,dy
-    self.doc:markCompositeDirty()
+    self:markBrushComposite(drag)
 end
 
 function app:strokeEnd(x,y,pressure)
@@ -325,8 +336,8 @@ function app:strokeEnd(x,y,pressure)
             self.color,self.brushSize,self.brushOpacity,
             self.tool=="eraser",drag.nativeStroke,drag.pressure,samplePressure)
         drag.x,drag.y,drag.pressure=point[1],point[2],samplePressure
+        self:markBrushComposite(drag)
     end
-    self.doc:markCompositeDirty()
 end
 
 function app:selectionStart(x,y)

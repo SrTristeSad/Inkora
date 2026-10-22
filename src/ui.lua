@@ -907,6 +907,15 @@ function UI:drawLayersPanel(app,x,w,h)
     end,tostring(math.floor(active.opacity*100+0.5)).."%",function()
         doc:checkpoint()
     end)
+    if doc:hasBlendLayers() then
+        local stats=doc:compositorStats()
+        self:print(("Compositor C++: %d tiles | %d px"):format(
+            stats.lastTiles,stats.lastPixels),
+            x+3,base+275,C.muted,self.small,w-6)
+    else
+        self:print("Compositor GPU direto",x+3,base+275,
+            C.muted,self.small,w-6)
+    end
 end
 
 function UI:drawWorkspaceHeader(app)

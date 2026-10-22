@@ -4,6 +4,7 @@ Document.__index = Document
 
 local MAX_LAYERS = 16
 local MAX_HISTORY = 10
+local COMPOSITE_TILE = 128
 local BLEND_MODES={"Normal","Multiply","Screen","Add","Overlay"}
 
 Document.BLEND_MODES=BLEND_MODES
@@ -87,16 +88,53 @@ function Document.new(w, h, name)
         selected = 1, layers = {layer(w, h, "Camada 1")},
         history = {}, future = {}, dirty = false, projectKey = nil,
         compositeDirty=true, compositeCanvas=nil, selection=nil,
+        compositeInvalidFull=true, compositeDirtyTiles={},
+        compositeMetrics={fullBuilds=0,partialBuilds=0,lastTiles=0,
+            lastPixels=0,totalPixels=0},
     }, Document)
     return self
 end
 
-function Document:markCompositeDirty()
+-- A rectangular brush upload invalidates only the overlapping 128px tiles.
+-- Structural edits, undos, masks and blends invalidate the entire composite.
+function Document:markCompositeDirty(region)
+    if not region or not self.compositeCanvas then
+        self.compositeInvalidFull=true
+        self.compositeDirtyTiles={}
+        self.compositeDirty=true
+        return
+    end
+    if self.compositeInvalidFull then return end
+    local x,y,w,h=region.x,region.y,region.width,region.height
+    if type(x)~="number" or type(y)~="number" or
+       type(w)~="number" or type(h)~="number" or
+       x~=x or y~=y or w~=w or h~=h then
+        self:markCompositeDirty()
+        return
+    end
+    if w<=0 or h<=0 then return end
+    local x0=math.max(0,math.floor(x))
+    local y0=math.max(0,math.floor(y))
+    local x1=math.min(self.width,math.ceil(x+w))
+    local y1=math.min(self.height,math.ceil(y+h))
+    if x0>=x1 or y0>=y1 then return end
+    for ty=math.floor(y0/COMPOSITE_TILE),math.floor((y1-1)/COMPOSITE_TILE) do
+        for tx=math.floor(x0/COMPOSITE_TILE),math.floor((x1-1)/COMPOSITE_TILE) do
+            local key=ty*math.ceil(self.width/COMPOSITE_TILE)+tx
+            self.compositeDirtyTiles[key]={
+                x=tx*COMPOSITE_TILE,y=ty*COMPOSITE_TILE,
+                width=math.min(COMPOSITE_TILE,self.width-tx*COMPOSITE_TILE),
+                height=math.min(COMPOSITE_TILE,self.height-ty*COMPOSITE_TILE),
+            }
+        end
+    end
     self.compositeDirty=true
 end
 
-function Document:checkpoint()
-    self:markCompositeDirty()
+-- The history snapshot does not change visible pixels by itself. Brush
+-- strokes can defer invalidation until their actual dirty upload is known.
+function Document:checkpoint(preserveComposite)
+    if not preserveComposite then self:markCompositeDirty() end
     table.insert(self.history, createSnapshot(self))
     if #self.history > MAX_HISTORY then table.remove(self.history, 1) end
     self.future = {}
@@ -252,46 +290,124 @@ function Document:hasBlendLayers()
     return false
 end
 
--- On-demand C++ compositor. Normal-mode documents keep the fast GPU path.
--- The composited bitmap is cached until a pixel/visibility/blend change.
-function Document:compositedCanvas()
-    if not Native.available() then return nil end
-    if not self.compositeDirty and self.compositeCanvas then return self.compositeCanvas end
-    local white=newCanvas(self.width,self.height)
+-- Extract an exact source-region mask without mutating the source.
+local function subMask(mask,x,y,w,h)
+    if not mask then return nil end
+    local crop=love.image.newImageData(w,h,"rgba8")
+    crop:paste(mask,0,0,x,y,w,h)
+    return crop
+end
+
+-- Compose one tile from the original source layers. The native compositor
+-- sees the same RGBA8 pixels/masks/clipping as the historical full pass.
+local function composeTile(self,region)
+    local x,y,w,h=region.x,region.y,region.width,region.height
+    local base=newCanvas(w,h)
     love.graphics.push("all")
-    love.graphics.setCanvas(white)
+    love.graphics.setCanvas(base)
     love.graphics.clear(1,1,1,1)
     love.graphics.pop()
-    local pixels=white:newImageData()
+    local output=base:newImageData()
     for index,layer in ipairs(self.layers) do
         if layer.visible and layer.opacity>0 then
-            local source=layer.canvas:newImageData()
-            local options={mask=layer.mask,clipping=layer.clipping}
+            local source=layer.canvas:newImageData(1,1,x,y,w,h)
+            local options={mask=subMask(layer.mask,x,y,w,h),
+                clipping=layer.clipping}
             if layer.clipping then
-                local base=self.layers[index-1]
-                -- Directly preceding visible layer is the clipping base.
-                -- A hidden/missing base makes the clipping layer invisible.
-                if base and base.visible then
-                    options.clip=base.canvas:newImageData()
-                    options.clipMask=base.mask
-                    options.clipOpacity=base.opacity
+                local preceding=self.layers[index-1]
+                if preceding and preceding.visible then
+                    options.clip=preceding.canvas:newImageData(1,1,x,y,w,h)
+                    options.clipMask=subMask(preceding.mask,x,y,w,h)
+                    options.clipOpacity=preceding.opacity
                 end
             end
-            Native.blendLayer(pixels,source,layer.opacity,layer.blendMode or 0,
-                options)
+            Native.blendLayer(output,source,layer.opacity,
+                layer.blendMode or 0,options)
         end
     end
-    local image=love.graphics.newImage(pixels)
-    local canvas=self.compositeCanvas or newCanvas(self.width,self.height)
-    love.graphics.push("all")
-    love.graphics.setCanvas(canvas)
-    love.graphics.setBlendMode("replace","premultiplied")
-    love.graphics.setColor(1,1,1,1)
-    love.graphics.draw(image)
-    love.graphics.pop()
-    self.compositeCanvas=canvas
+    return output
+end
+
+-- Normal-mode documents keep the GPU fast path. Documents with effects
+-- perform a full native pass only at creation/structural invalidation.
+-- Brush strokes subsequently recompose ONLY affected 128x128 regions.
+function Document:compositedCanvas()
+    if not Native.available() then return nil end
+    if not self.compositeDirty and self.compositeCanvas then
+        return self.compositeCanvas
+    end
+    local metrics=self.compositeMetrics
+    if self.compositeInvalidFull or not self.compositeCanvas then
+        -- Retain the exact historical full-pass result as a reference.
+        local white=newCanvas(self.width,self.height)
+        love.graphics.push("all")
+        love.graphics.setCanvas(white)
+        love.graphics.clear(1,1,1,1)
+        love.graphics.pop()
+        local pixels=white:newImageData()
+        for index,layer in ipairs(self.layers) do
+            if layer.visible and layer.opacity>0 then
+                local source=layer.canvas:newImageData()
+                local options={mask=layer.mask,clipping=layer.clipping}
+                if layer.clipping then
+                    local preceding=self.layers[index-1]
+                    if preceding and preceding.visible then
+                        options.clip=preceding.canvas:newImageData()
+                        options.clipMask=preceding.mask
+                        options.clipOpacity=preceding.opacity
+                    end
+                end
+                Native.blendLayer(pixels,source,layer.opacity,
+                    layer.blendMode or 0,options)
+            end
+        end
+        local image=love.graphics.newImage(pixels)
+        local canvas=self.compositeCanvas or newCanvas(self.width,self.height)
+        love.graphics.push("all")
+        love.graphics.setCanvas(canvas)
+        love.graphics.setBlendMode("replace","premultiplied")
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(image)
+        love.graphics.pop()
+        self.compositeCanvas=canvas
+        self.compositeInvalidFull=false
+        self.compositeDirtyTiles={}
+        metrics.fullBuilds=metrics.fullBuilds+1
+        metrics.lastTiles=math.ceil(self.width/COMPOSITE_TILE)*
+                          math.ceil(self.height/COMPOSITE_TILE)
+        metrics.lastPixels=self.width*self.height
+    else
+        local regions=self.compositeDirtyTiles
+        local count,pixels=0,0
+        -- Readbacks happen outside the target canvas render scope.
+        for _,region in pairs(regions) do
+            local sub=composeTile(self,region)
+            local image=love.graphics.newImage(sub)
+            love.graphics.push("all")
+            love.graphics.setCanvas(self.compositeCanvas)
+            love.graphics.setBlendMode("replace","premultiplied")
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(image,region.x,region.y)
+            love.graphics.pop()
+            count=count+1
+            pixels=pixels+region.width*region.height
+        end
+        self.compositeDirtyTiles={}
+        metrics.partialBuilds=metrics.partialBuilds+1
+        metrics.lastTiles=count
+        metrics.lastPixels=pixels
+    end
+    metrics.totalPixels=metrics.totalPixels+metrics.lastPixels
     self.compositeDirty=false
-    return canvas
+    return self.compositeCanvas
+end
+
+-- Useful both for profiling and for a visible cache indicator in the UI.
+function Document:compositorStats()
+    local m=self.compositeMetrics
+    return {fullBuilds=m.fullBuilds,partialBuilds=m.partialBuilds,
+        lastTiles=m.lastTiles,lastPixels=m.lastPixels,
+        totalPixels=m.totalPixels,tileSize=COMPOSITE_TILE}
 end
 
 -- Atualiza uma camada inteira como uma unica operacao de desfazer.

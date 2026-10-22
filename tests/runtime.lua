@@ -307,6 +307,91 @@ local function run(app)
         print("INKORA_MASK_CLIPPING_GPU_OK")
     end
 
+    if requireNative then
+        -- Incremental compositor re-renders the native blend, mask and
+        -- clipping only in the 128x128 tile touched by a brush stroke.
+        local mosaic=Doc.new(384,256,"Compositor parcial C++")
+        local first=mosaic.layers[1].canvas
+        Brush.segment(first,79.5,72.5,79.5,72.5,
+            {0.98,0.08,0.06},104,1,false,Brush.beginStroke(first))
+        assert(mosaic:addLayer("Camada com efeitos"))
+        local top=mosaic.layers[2].canvas
+        Brush.segment(top,81.5,71.5,81.5,71.5,
+            {0.08,0.10,0.99},104,1,false,Brush.beginStroke(top))
+        assert(mosaic:setLayerBlend(2,2))
+        assert(mosaic:setClipping(2,true))
+        assert(mosaic:setSelection(0,0,194,255))
+        assert(mosaic:createLayerMask(2))
+        mosaic:clearSelection()
+        local composed=mosaic:compositedCanvas()
+        local startMetrics=mosaic:compositorStats()
+        assert(startMetrics.fullBuilds==1 and
+            startMetrics.partialBuilds==0 and
+            startMetrics.lastPixels==384*256,
+            "Primeiro pass nativo deveria compor o documento completo")
+        local snapshot=composed:newImageData()
+        local farR,farG,farB=snapshot:getPixel(280,192)
+        assert(farR>0.99 and farG>0.99 and farB>0.99)
+        mosaic:checkpoint(true)
+        local detail=Brush.beginStroke(top,{
+            hardness=1,tip=0,spacing=0.10,flow=1
+        })
+        Brush.segment(top,85.5,76.5,86.5,76.5,
+            {0.91,0.35,0.08},12,1,false,detail)
+        assert(Native.lastUpload and Native.lastUpload.width>0,
+            "Motor de pincel nao retornou regiao suja")
+        mosaic:markCompositeDirty(Native.lastUpload)
+        assert(composed==mosaic:compositedCanvas(),
+            "Compositor parcial recriou o objeto Canvas")
+        local updated=mosaic:compositorStats()
+        assert(updated.fullBuilds==1 and updated.partialBuilds==1
+            and updated.lastTiles==1 and updated.lastPixels==128*128,
+            "Pincel pequeno recompos mais que um tile")
+        local changed=composed:newImageData()
+        local p0,q0,r0=changed:getPixel(85,76)
+        local p1,q1,r1=snapshot:getPixel(85,76)
+        assert(math.abs(p0-p1)+math.abs(q0-q1)+math.abs(r0-r1)>0.03,
+            "Tile recomposto nao exibiu a pincelada nova")
+        local fr,fg,fb=changed:getPixel(280,192)
+        assert(fr==farR and fg==farG and fb==farB,
+            "Compositor parcial modificou area distante")
+        local px,py,pb=mosaic:sampleColor(85,76)
+        assert(px and py and pb,"Amostra do compositor parcial falhou")
+        local path=mosaic:exportPNG()
+        assert(path and path:match("%.png$"),"Exportacao parcial falhou")
+        -- A complete recomposition must produce byte-identical RGBA8 at
+        -- tile seams and sampled interior points, even with two effects.
+        mosaic:markCompositeDirty()
+        local full=mosaic:compositedCanvas():newImageData()
+        assert(mosaic:compositorStats().fullBuilds==2)
+        for y=0,255,7 do
+            for x=0,383,7 do
+                local a,b,c,d=changed:getPixel(x,y)
+                local e,f,g,h=full:getPixel(x,y)
+                assert(math.abs(a-e)<0.005 and math.abs(b-f)<0.005
+                    and math.abs(c-g)<0.005 and math.abs(d-h)<0.005,
+                    ("Borda ou cor divergiu no compositor parcial %d,%d")
+                        :format(x,y))
+            end
+        end
+        for _,x in ipairs({0,126,127,128,129,254,255,256,257,383}) do
+            local a,b,c,d=changed:getPixel(x,76)
+            local e,f,g,h=full:getPixel(x,76)
+            assert(math.abs(a-e)<0.005 and math.abs(b-f)<0.005
+                and math.abs(c-g)<0.005 and math.abs(d-h)<0.005,
+                "Seam no tile compositor: "..x)
+        end
+        assert(mosaic:setLayerBlend(2,1))
+        mosaic:compositedCanvas()
+        assert(mosaic:compositorStats().fullBuilds==3,
+            "Trocar blending deve invalidar todos os tiles")
+        assert(mosaic:undo())
+        mosaic:compositedCanvas()
+        assert(mosaic:compositorStats().fullBuilds==4,
+            "Undo deve invalidar toda a imagem composta")
+        print("INKORA_PARTIAL_COMPOSITOR_MASK_CLIP_GPU_OK")
+    end
+
     -- Teste de atravessar 3 tiles: nao pode haver costura nas fronteiras.
     local wide=Doc.new(320,192,"Tile boundary")
     Native.resetStats()

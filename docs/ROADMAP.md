@@ -50,13 +50,15 @@
 - [x] Três pontas nativas iniciais (redonda, chata, granulada procedural), com API C++ v3 e testes.
 - [x] Cache de tiles 128×128 com leituras regionais sob demanda, inicialização transparente e invalidação em operações Lua.
 - [x] Limite de tiles em cache por camada, com LRU e recarregamento seguro após expulsão.
-- [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes, incluindo blend modes que usam readbacks completos.
+- [ ] Benchmark real, uso máximo de VRAM/CPU e teste prolongado com canvas grandes. A primeira composição e mudanças estruturais com blend ainda usam readbacks completos; pinceladas já fazem atualizações regionais.
 - [x] Compositor C++ v5 e cinco modos iniciais: Normal, Multiply, Screen, Add, Overlay; integrados à interface, undo, exportação PNG e manifesto.
 - [x] Alpha Lock por camada, preservado em undo/redo e no manifesto do projeto (retrocompatível).
 - [x] Seleção retangular temporária aplicada ao pincel/borracha e balde, inclusive nos limites de tiles.
 - [x] Máscara por camada criada da seleção; inversão, remoção, undo/redo, persistência em PNG.
 - [x] Clipping à transparência da camada imediatamente inferior, considerando máscara e opacidade, com compositor C++ v7.
-- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, composição por tiles e undo/redo eficiente.
+- [x] Recomposição incremental por tiles de 128×128 após pinceladas, usando as dirty regions do núcleo e o mesmo compositor nativo com blend/máscara/clipping.
+- [x] Métricas de tiles/pixels recompostos expostas no painel de Camadas e verificadas com teste de regressão GPU comparando pixels com a composição integral.
+- [ ] Edição/pintura direta da máscara, clipping em cadeia, grupos, composição inicial em tiles sem leitura integral e undo/redo eficiente.
 - [ ] Seleção com laço, varinha, elipse, feathering e suporte nas ferramentas de formas.
 - [ ] Selecao e transformacoes: laço, varinha, mover, redimensionar, rotacionar (retângulo básico já implementado).
 - [ ] Filtros/efeitos de pintura e processamento com controle de memoria.
