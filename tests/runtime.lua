@@ -1409,7 +1409,8 @@ local function run(app)
 
     -- End-to-end group management: + -> New Folder, nested folder,
     -- pointer drag into a group, persisted memberships, move out.
-    app.startup:galleryAskFolder()
+    clickStartup("tool-plus")
+    clickStartup("new-folder")
     assert(app.startup.galleryModal.kind=="folder")
     app.startup.galleryModal.value="Minhas artes"
     local group=app.startup:galleryCreateFolder()
@@ -1454,6 +1455,18 @@ local function run(app)
     app.startup.folders:moveProjects({key},"")
     assert(app.startup.folders:location(key)=="",
         "Nao foi possivel tirar a obra do grupo")
+    app.startup:galleryOpenFolder(child)
+    clickStartup("tool-plus")
+    clickStartup("open-create")
+    assert(app.screen=="create")
+    clickStartup("preset-7")
+    clickStartup("create-artwork")
+    local insideKey=app.doc.projectKey
+    assert(app.startup.folders:location(insideKey)==child,
+        "Novo desenho nao foi criado dentro do grupo aberto")
+    assert(app:returnToGallery())
+    assert(app.startup.galleryFolder==child,
+        "Retorno ao editor perdeu o grupo de origem")
     app.startup.galleryFolder=""
     app.startup:refreshGallery()
     print("INKORA_GALLERY_CREATE_NEST_MOVE_DRAG_OK")
