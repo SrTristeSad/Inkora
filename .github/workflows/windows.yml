@@ -9,7 +9,8 @@ on:
 jobs:
   lua-syntax:
     name: Verify Lua source
-    runs-on: ubuntu-latest
+    # Use a stable Ubuntu image for reproducible LÖVE/xvfb dependencies.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Lua 5.1
