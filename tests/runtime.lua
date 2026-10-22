@@ -1432,6 +1432,8 @@ local function run(app)
     assert(folderHit and artHit,
         "Grupo e desenho precisam aparecer juntos na galeria")
     assert(app.startup:pointerPressed(artHit.x+artHit.w/2,artHit.y+artHit.h/2))
+    assert(app.startup.galleryDrag and not app.startup.galleryDrag.active)
+    app.startup.galleryDrag.started=love.timer.getTime()-0.6
     app.startup:pointerMoved(folderHit.x+folderHit.w/2,folderHit.y+folderHit.h/2)
     app.startup:pointerReleased(folderHit.x+folderHit.w/2,folderHit.y+folderHit.h/2)
     local groupedCount=0
