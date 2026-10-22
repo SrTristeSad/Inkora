@@ -20,7 +20,7 @@ static InkoraStroke makeStroke(std::vector<uint8_t>& buf) {
     return s;
 }
 int main() {
-    assert(inkora_core_api_version()==12);
+    assert(inkora_core_api_version()==13);
 
     std::vector<uint8_t> img(W*H*4,0);
     // Preexisting red shape with partially transparent pixels.

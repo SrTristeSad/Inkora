@@ -233,6 +233,57 @@ local function run(app)
         assert(not Fill.apply(filled,0,0,{0,0,1},0,{alphaLock=true}),
             "Balde deveria ignorar area transparente travada")
         print("INKORA_SELECTION_ALPHA_LOCK_GPU_OK")
+        -- C++ native bucket integration: selection crosses both 128px
+        -- seams, uploads only changed pixels, and undo is region-based.
+        local bucket=Doc.new(384,384,"Balde nativo regional")
+        assert(bucket:setSelection(123,124,137,137))
+        local fillBuffer=bucket.layers[1].canvas:newImageData()
+        local changed,bounds=Fill.apply(fillBuffer,126,126,{0.1,0.7,0.9},0,{
+            selection=bucket.selection
+        })
+        assert(changed and bounds.x==123 and bounds.y==124 and
+            bounds.width==15 and bounds.height==14,
+            "Balde nativo perdeu os limites da selecao")
+        assert(bucket:applyFillRegion(1,fillBuffer,bounds))
+        local history=bucket:historyStats()
+        assert(history.strokeCount==1 and history.fullCount==0 and
+            history.tiles==4 and history.bytes==4*128*128*4,
+            "Balde deveria capturar somente quatro blocos de undo")
+        local painted=bucket.layers[1].canvas:newImageData()
+        local _,green,blue,alpha=painted:getPixel(127,127)
+        local _,_,_,outsideAlpha=painted:getPixel(138,127)
+        assert(green>0.6 and blue>0.8 and alpha>0.9 and outsideAlpha==0,
+            "Upload parcial nao respeitou selecao/transparencia")
+        assert(bucket:undo())
+        local undone=bucket.layers[1].canvas:newImageData()
+        local _,_,_,undoneA=undone:getPixel(127,127)
+        assert(undoneA==0,"Undo do balde nao removeu tinta")
+        assert(bucket:redo())
+        local redone=bucket.layers[1].canvas:newImageData()
+        local _,_,_,redoA=redone:getPixel(127,127)
+        assert(redoA>0.9,"Redo do balde nao restaurou tinta")
+        assert(bucket:setLayerAlphaLock(1,true))
+        local before=bucket.layers[1].canvas
+        local recolor=before:newImageData()
+        local recolored,recolorBounds=Fill.apply(recolor,126,126,{1,0,0},0,{
+            selection=bucket.selection,alphaLock=true
+        })
+        assert(recolored and recolorBounds.width==15)
+        bucket:applyFillRegion(1,recolor,recolorBounds)
+        assert(bucket.layers[1].canvas~=before,
+            "Balde nao separou pixels compartilhados no COW")
+        local _,_,_,oldA=before:newImageData(1,1,127,127,1,1):getPixel(0,0)
+        local red,_,_,newA=bucket.layers[1].canvas:
+            newImageData(1,1,127,127,1,1):getPixel(0,0)
+        assert(oldA>0.9 and red>0.95 and newA==oldA,
+            "Balde com Alpha Lock alterou a camada original")
+        assert(bucket:undo())
+        local _,oldGreen=bucket.layers[1].canvas:
+            newImageData(1,1,127,127,1,1):getPixel(0,0)
+        assert(oldGreen>0.6,"Undo do balde com COW nao restaurou cor")
+        assert(bucket:redo())
+        print("INKORA_NATIVE_FILL_REGION_UNDO_GPU_OK")
+
     end
 
     if requireNative then
