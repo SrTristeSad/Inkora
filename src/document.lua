@@ -732,15 +732,18 @@ end
 -- Save one small gallery thumbnail independently of the editable layers.
 -- Legacy projects without thumbnails keep loading as before.
 function Document:saveGalleryPreview(root)
-    local tw,th=320,208
+    -- The preview must retain the canvas's *actual* aspect ratio.
+    -- A fixed 320x208 postcard made all portrait art look tiny in My Gallery.
+    local longest=320
+    local scale=math.min(1,longest/math.max(self.width,self.height))
+    local tw=math.max(1,math.floor(self.width*scale+0.5))
+    local th=math.max(1,math.floor(self.height*scale+0.5))
     local image=love.graphics.newCanvas(tw,th,{format="rgba8"})
     love.graphics.push("all")
     love.graphics.setCanvas(image)
-    love.graphics.clear(0.94,0.95,0.97,1)
-    local scale=math.min((tw-24)/self.width,(th-24)/self.height)
-    local x=(tw-self.width*scale)/2
-    local y=(th-self.height*scale)/2
-    self:draw(x,y,scale)
+    love.graphics.clear(1,1,1,1)
+    -- Render the entire editable composition, not just its selected layer.
+    self:draw(0,0,math.min(tw/self.width,th/self.height))
     love.graphics.pop()
     local bytes=pngBytes(image)
     image:release()
