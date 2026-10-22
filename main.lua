@@ -224,6 +224,10 @@ function app:createArtwork(w,h,name)
     local ok,err=pcall(function()
         self:newDocument(w,h,name~="" and name or "Meu desenho")
         self.doc:save(self.doc.name) -- new blank works already exist in gallery
+        if self.startup.galleryFolder~="" then
+            self.startup.folders:moveProjects(
+                {self.doc.projectKey},self.startup.galleryFolder)
+        end
     end)
     if not ok then
         self.doc=previous
@@ -257,7 +261,7 @@ function app:returnToGallery()
         end
     end
     self.dragging=nil
-    self.startup:openGallery(self)
+    self.startup:openGallery(self,true)
     return true
 end
 
