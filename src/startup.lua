@@ -38,7 +38,7 @@ function Startup.new()
         galleryDetailKey=nil,gallerySelecting=false,gallerySelected={},
         galleryModal=nil,galleryMenu=false,notice=nil,
         galleryFolder="",folders=Folders.new(),newMenu=false,
-        galleryDrag=nil,
+        galleryDrag=nil,canvasScroll=0,folderTitlePress=nil,
         draft={name="Meu desenho",width="1280",height="1280",preset=1,focus=nil},
         fonts={
             logo=love.graphics.newFont(56),
@@ -87,9 +87,12 @@ function Startup:openGallery(app,retainFolder)
     self.error=nil
 end
 function Startup:openCreate(app)
-    self.draft={name="Meu desenho",width="1280",height="1280",preset=1,focus=nil}
+    self.draft={name="Meu desenho",width="1000",height="1000",preset=nil,focus=nil}
+    self.canvasScroll=0
     self.error=nil
-    app.screen="create"
+    self.newMenu=false
+    self.galleryModal={kind="new",focus=nil}
+    if app then app.screen="gallery" end
 end
 function Startup:drawBackground(w,h)
     love.graphics.clear(C.deep)
@@ -343,11 +346,25 @@ function Startup:galleryBack(app)
 end
 function Startup:galleryNewMenu()
     self.galleryMenu=false
-    self.newMenu=not self.newMenu
+    if self.galleryModal and self.galleryModal.kind=="new" then
+        self.galleryModal=nil
+    else self:openCreate() end
 end
 function Startup:galleryAskFolder(keys)
     self.newMenu=false
-    self.galleryModal={kind="folder",value="Nova pasta",keys=keys}
+    local ok,id=pcall(function()
+        return self.folders:groupProjects(keys,self.galleryFolder)
+    end)
+    if not ok then
+        self.notice="Falha ao criar pasta: "..tostring(id)
+        return nil
+    end
+    self.galleryModal=nil
+    self.gallerySelected={}
+    self.gallerySelecting=false
+    self:refreshGallery()
+    self.notice="Pasta criada. Abra-a para editar o nome."
+    return id
 end
 function Startup:galleryCreateFolder()
     local modal=self.galleryModal
@@ -610,13 +627,7 @@ function Startup:galleryFolderTile(entry,x,y,thumbW,thumbH,index)
     drawRect(x-5,y-5,thumbW+10,thumbH+10,light,15)
     lineRect(x-5,y-5,thumbW+10,thumbH+10,outer,15)
     drawRect(x+13,y+13,thumbW-26,thumbH-26,G.white,3)
-    local cover
-    for _,project in ipairs(self.projects) do
-        if self.folders:location(project.key)==entry.id then
-            cover=project
-            break
-        end
-    end
+    local cover=self.folders:cover(entry.id,self.projects)
     if cover then
         local img=self:thumbnail(cover)
         if img then
@@ -780,19 +791,6 @@ function Startup:drawGallery(app,w,h)
             self:hit(w-92,fy,91,45,"gallery-edit",
                 function()self:galleryEdit(app)end)
         end
-    end
-    if self.newMenu and not self.gallerySelecting then
-        local nx=8
-        local ny=h-footerH-100
-        drawRect(nx,ny,234,96,G.bar,5)
-        self:label("Nova pasta",nx+18,ny+12,self.fonts.body,G.white)
-        self:hit(nx,ny,234,45,"new-folder",
-            function()self:galleryAskFolder()end)
-        love.graphics.setColor(G.muted)
-        love.graphics.line(nx+8,ny+47,nx+226,ny+47)
-        self:label("Novo desenho",nx+18,ny+58,self.fonts.body,G.white)
-        self:hit(nx,ny+49,234,45,"open-create",
-            function()self.newMenu=false;self:openCreate(app)end)
     end
     if self.galleryMenu then
         local mw=206
@@ -1104,7 +1102,6 @@ function Startup:pointerReleased(x,y)
         if destination and destination.kind=="art" and
             destination.key~=entry.key then
             self:galleryAskFolder({entry.key,destination.key})
-            self.notice="Escolha o nome da pasta para agrupar as duas obras."
         end
     end
 end
