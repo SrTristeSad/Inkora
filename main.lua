@@ -6,13 +6,14 @@ local UI = require("src.ui")
 local palette = require("src.palette")
 local Native = require("src.native")
 local Presets = require("src.presets")
+local Profiles = require("src.brush_profiles")
 local Viewport = require("src.viewport")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
     brushHardness=0.82, brushSpacing=0.18, brushTip=0,
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
-    presetId="ink",
+    presetId="ink", profiles={},
     fillTolerance=0.02, colorIndex=1, color=palette[1],
     zoom=1, offsetX=0, offsetY=0, rotation=0, dragging=nil,
     favorites={ink=true,pencil=true},
@@ -42,23 +43,60 @@ function app:statusMessage(message)
     self.message=message
 end
 
--- Every library preset is mapped to real C++ stroke parameters, not merely
--- a selected card in the UI. Custom imported tips remain supported.
+-- Editable profiles are independent from factory brush presets.
+-- Only "Save preset" persists the current settings.
+function app:presetStyle(id)
+    local original=Presets.find(id)
+    if not original then return nil end
+    local style=Profiles.merge(original,self.profiles[id])
+    if style.tip==3 and not self.tipMask then
+        if original.tip==3 then return nil end
+        style.tip=original.tip
+    end
+    return style
+end
+
 function app:choosePreset(id)
-    local p=Presets.find(id)
+    local p=self:presetStyle(id)
     if not p then return false end
-    if p.tip==3 and not self.tipMask then return false end
     self.presetId=p.id
-    self.brushSize=p.size
-    self.brushHardness=p.hardness
-    self.brushSpacing=p.spacing
-    self.brushOpacity=p.opacity
-    self.brushFlow=p.flow
-    self.stabilization=p.stabilization
-    self.brushTip=p.tip
-    self.pressureOpacity=p.pressureOpacity
+    Profiles.apply(self,p)
     self.tool="brush"
     if self.ui then self.ui.tab="brush" end
+    return true
+end
+
+function app:saveBrushProfile()
+    local id=self.presetId
+    if not Presets.find(id) then return false end
+    local before=self.profiles[id]
+    self.profiles[id]=Profiles.capture(self)
+    local ok,err=Profiles.write(self.profiles)
+    if not ok then
+        self.profiles[id]=before
+        self:statusMessage("Nao foi possivel salvar pincel: "..tostring(err))
+        return false
+    end
+    require("src.brush_preview").invalidate(id)
+    self:statusMessage("Ajustes de "..(Presets.find(id).name).." salvos")
+    return true
+end
+
+function app:resetBrushProfile()
+    local id=self.presetId
+    if not Presets.find(id) then return false end
+    local before=self.profiles[id]
+    self.profiles[id]=nil
+    local ok,err=Profiles.write(self.profiles)
+    if not ok then
+        self.profiles[id]=before
+        self:statusMessage("Nao foi possivel restaurar: "..tostring(err))
+        return false
+    end
+    require("src.brush_preview").invalidate(id)
+    self:choosePreset(id)
+    if self.ui then self.ui.tab="settings" end
+    self:statusMessage("Pincel restaurado para o padrao")
     return true
 end
 
@@ -331,6 +369,7 @@ function love.load()
     love.graphics.setBackgroundColor(0.15,0.19,0.25)
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
+    app.profiles=Profiles.read()
     app:loadFavorites()
     app:choosePreset("ink")
     app:newDocument(1280,800)
@@ -346,7 +385,7 @@ function love.load()
     end
     local preview=os.getenv("INKORA_PREVIEW")
     if preview=="brush" or preview=="layers" or preview=="color"
-        or preview=="rotate" then
+        or preview=="rotate" or preview=="settings" then
         require("tests.preview").seed(app)
         if preview=="rotate" then
             local l,t,r,b=workspace()

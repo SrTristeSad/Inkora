@@ -32,6 +32,8 @@ A compilação é automática no GitHub Actions. O pacote Windows portátil incl
 - Quatro abas funcionais no inspetor lateral: **Pincéis** (biblioteca visual com prévias), **Ajustes**, **Camadas** (miniaturas reais) e **Cor** (anel de matiz e quadrado de saturação/brilho).
 - Oito presets iniciais independentes: Nanquim, Lápis, Marcador, Aerógrafo, Giz, Pincel macio, Pixel e Ponta PNG. Cada preset altera parâmetros **reais** do motor de pintura C++, como ponta, fluxo, espaçamento, dureza, tamanho e opacidade.
 - **Prévia gerada pelo motor C++**: as miniaturas da biblioteca são rasterizadas de verdade, com a ponta e dinâmica de cada preset, uma única vez e guardadas em cache (não são desenhos artificiais feitos pela interface). O tamanho na miniatura é adaptado ao espaço visual.
+- **Prévia ao vivo na aba Ajustes**: alterar tamanho, opacidade, fluxo, dureza, espaçamento, ponta ou influência da pressão atualiza um traço de teste feito pelo mesmo motor C++ e pela cor selecionada. Apenas a última prévia dinâmica permanece em memória; mover os controles não modifica o desenho.
+- **Presets editáveis e persistentes**: use **Salvar preset** para conservar as configurações do pincel selecionado e **Restaurar** para voltar à configuração de fábrica. Os ajustes ficam em `brush-profiles-v1.txt` no diretório do Inkora. Um ponto ao lado do nome identifica presets personalizados. A prévia de cada cartão também passa a refletir as configurações salvas.
 - **Categorias e favoritos combináveis:** navegue entre Todos, Tinta, Esboço, Pintura, Textura, Precisão e Sua biblioteca, mantendo o filtro de favoritos quando desejar.
 - **Painel lateral redimensionável:** arraste a borda esquerda do inspetor de pincéis/camadas/cores para ampliar o espaço de controles, preservando a posição do desenho no workspace.
 - **Favoritos persistentes:** marque com `*` no cartão do pincel e use o filtro **Favoritos**. As preferências ficam em `brush-favorites.txt` no diretório do Inkora, sem depender de servidor.
@@ -91,6 +93,7 @@ Os projetos e PNGs são gravados no diretório de dados do LÖVE, usando a ident
 - `projects/` — projetos editáveis, com manifesto e PNGs de cada camada.
 - `exports/` — imagens PNG exportadas.
 - `brush-favorites.txt` — preferências de pincéis favoritos.
+- `brush-profiles-v1.txt` — ajustes personalizados dos oito presets, salvos localmente. As entradas são verificadas antes da leitura; valores inválidos são ignorados.
 
 Os caminhos podem ser consultados na pasta de dados do Inkora. O rodapé mostra o documento, a ferramenta e o zoom. O sistema ainda **não** tem diálogo nativo “Salvar como”.
 
@@ -124,7 +127,7 @@ A **primeira implementação não incorpora código, pincéis, gráficos ou bibl
 
 ## Interface: objetivo perceptível da próxima versão
 
-**Correção de prioridade:** versões anteriores desenvolveram recursos técnicos sem transformarem suficientemente a experiência visual. A interface agora possui oito presets com prévias produzidas pelo motor C++, categorias funcionais, favoritos persistentes, inspetor redimensionável, rotação ancorada do canvas, miniaturas de camadas e um seletor HSV. **Ainda faltam** docking completo de painéis, UI otimizada para tela pequena, uma biblioteca profissional de pontas, comparativos visuais com o ibisPaint e testes de usabilidade com artistas. Não declarar equivalência visual ou funcional até validar esses itens.
+**Correção de prioridade:** versões anteriores desenvolveram recursos técnicos sem transformarem suficientemente a experiência visual. A interface agora possui oito presets com prévias produzidas pelo motor C++, prévia dinâmica de ajustes de pincel, salvamento/restauração individual de presets, categorias funcionais, favoritos persistentes, inspetor redimensionável, rotação ancorada do canvas, miniaturas de camadas e um seletor HSV. **Ainda faltam** docking completo de painéis, UI otimizada para tela pequena, uma biblioteca profissional de pontas, comparativos visuais com o ibisPaint e testes de usabilidade com artistas. Não declarar equivalência visual ou funcional até validar esses itens.
 
 ## Rumo ao motor Lua + C++
 

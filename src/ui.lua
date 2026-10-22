@@ -476,7 +476,7 @@ function UI:drawBrushPanel(app,x,w,h)
             love.graphics.rectangle("line",px+0.5,py+0.5,itemWidth-1,57,10)
             love.graphics.setLineWidth(1)
         end
-        local preview=BrushPreview.get(preset,app.tipMask)
+        local preview=BrushPreview.get(app:presetStyle(preset.id),app.tipMask)
         if preview then
             local sw,sh=preview:getDimensions()
             local pw=itemWidth-21
@@ -488,7 +488,9 @@ function UI:drawBrushPanel(app,x,w,h)
         else
             self:drawStrokePreview(preset.preview,px+4,py+2,itemWidth-27)
         end
-        self:print(preset.name,px+7,py+37,C.white,self.small,itemWidth-13)
+        local name=preset.name
+        if app.profiles[preset.id] then name=name.." •" end
+        self:print(name,px+7,py+37,C.white,self.small,itemWidth-13)
         self:register(px,py,itemWidth,58,function()
             if app:choosePreset(preset.id) then
                 app:statusMessage("Pincel: "..preset.name)
@@ -559,12 +561,28 @@ function UI:drawSettings(app,x,w,h)
         end,tostring(math.floor(app.pressureOpacity*100+0.5)).."%"},
     }
     for i,c in ipairs(controls) do
-        self:slider(x+10,224+(i-1)*53,w-22,c[2],c[1],c[3],c[4])
+        self:slider(x+10,220+(i-1)*45,w-22,c[2],c[1],c[3],c[4])
     end
-    self:print("PONTA DO PINCEL",x,h-127,C.muted,self.small)
+    self:print("PREVIA AO VIVO - MOTOR C++",x,522,C.white,self.small)
+    self:rect(x+5,542,w-10,56,C.surface,8)
+    local preview=BrushPreview.getLive(app)
+    if preview then
+        local iw,ih=preview:getDimensions()
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(preview,x+12,548,0,(w-24)/iw,44/ih)
+    else
+        self:print("Motor C++ indisponivel",x+17,563,C.muted,self.small,w-34)
+    end
+    self:button(x+4,611,(w-14)/2,31,"Salvar preset",function()
+        app:saveBrushProfile()
+    end,"primary")
+    self:button(x+10+(w-14)/2,611,(w-14)/2,31,"Restaurar",function()
+        app:resetBrushProfile()
+    end)
+    self:print("PONTA DO PINCEL",x,h-109,C.muted,self.small)
     for i,item in ipairs({{"Red.",0},{"Chata",1},{"Grao",2},{"PNG",3}}) do
-        local bx=x+(i-1)*69
-        self:button(bx,h-105,62,30,item[1],function()
+        local bx=x+(i-1)*(w/4)
+        self:button(bx,h-85,w/4-7,30,item[1],function()
             if item[2]==3 and not app.tipMask then
                 app:statusMessage("Shift + arraste PNG para criar a ponta")
             else app.brushTip=item[2];app.tool="brush" end

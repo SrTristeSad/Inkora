@@ -6,7 +6,7 @@
 
 | Componente | Estado atual |
 | --- | --- |
-| Protótipo desktop Lua/LÖVE (canvas e UI) | Biblioteca visual, HSV, miniaturas, favoritos persistentes e canvas rotacionável; teste manual Windows pendente |
+| Protótipo desktop Lua/LÖVE (canvas e UI) | Biblioteca visual, prévia dinâmica C++, perfis de pincel editáveis persistentes, HSV, miniaturas, favoritos e canvas rotacionável; teste manual Windows pendente |
 | Pincel, borracha, formas, balde, camadas e projeto básico | Protótipos Lua; não equivalem ao ibisPaint |
 | Engenharia reversa funcional documentada do ibisPaint | **Matriz inicial baseada em documentação pública; medição lado a lado pendente** |
 | Auditoria detalhada de ReveriePaint e Klecks | **Auditoria inicial dos arquivos C++/JNI e TS de pincel/camadas; aprofundar ainda** |
@@ -47,11 +47,13 @@
 - [x] Primeira reformulação visual: biblioteca de oito presets funcionais, miniaturas em camadas, seletor HSV, área de pintura central e barra de ferramentas compacta.
 - [x] Favoritos persistentes na biblioteca e filtro funcional de pincéis.
 - [x] Miniaturas de pincéis renderizadas com o motor C++ e cache por preset.
+- [x] Prévia dinâmica, cache de um único canvas de prévia, reflexo da ponta, fluxo, pressão, opacidade e cor selecionada.
+- [x] Salvar/restaurar configuração individual de cada preset no disco, com validação dos valores e miniaturas atualizadas.
 - [x] Biblioteca filtrável por categorias de pincéis, combinável com favoritos.
 - [x] Inspetor lateral de largura ajustável por arraste, preservando o enquadramento do documento.
 - [x] Rotação visual do canvas com mouse/pincel/seleção alinhados e zoom ancorado; sem alterar a orientação dos pixels exportados.
 - [ ] Testar usabilidade da rotação com canetas digitais e gestos multitouch reais em Windows.
-- [ ] Evoluir o desktop para nível profissional: dock de painéis, paleta flutuante, preview ao vivo quando o usuário muda parâmetros, opções de caneta digitalizadora, atalhos personalizáveis e UX validada com artistas.
+- [ ] Evoluir o desktop para nível profissional: dock de painéis, paleta flutuante, ajuste da textura de ponta importada, caneta digitalizadora, atalhos personalizáveis e UX validada com artistas.
 - [ ] Formatos interoperáveis e documentos complexos.
 - [ ] Reutilizar o mesmo nucleo C++/Lua em Android, com suporte a toque/gestos/caneta.
 - [ ] Comparacao sistematica da experiencia com referencias, sem copiar marca, arte ou codigo proprietario.

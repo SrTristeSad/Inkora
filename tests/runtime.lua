@@ -395,6 +395,53 @@ local function run(app)
         assert(UI:click(px+215,230),"Controle de tamanho nao clicavel")
         assert(app.brushSize>50,"Slider de pincel nao alterou o tamanho")
         UI:mousereleased()
+
+        -- The live panel must show edited (not factory) parameters
+        -- and reuse the same C++ texture until a real value changes.
+        local BrushPreview=require("src.brush_preview")
+        local liveBefore=BrushPreview.getLive(app)
+        assert(liveBefore and liveBefore==BrushPreview.getLive(app),
+            "Previa ao vivo nao foi mantida em cache")
+        app.brushFlow=0.06
+        local liveAfter=BrushPreview.getLive(app)
+        assert(liveAfter and liveAfter~=liveBefore,
+            "Fluxo alterado nao renovou a previa C++")
+        assert(BrushPreview.stats().live==1,
+            "Ajustes deveriam reter apenas uma previa dinamica")
+        local imgBefore,imgAfter=liveBefore:newImageData(),liveAfter:newImageData()
+        local alphaBefore,alphaAfter=0,0
+        for yy=0,43,3 do for xx=0,167,3 do
+            local _,_,_,a=imgBefore:getPixel(xx,yy)
+            local _,_,_,b=imgAfter:getPixel(xx,yy)
+            alphaBefore=alphaBefore+a
+            alphaAfter=alphaAfter+b
+        end end
+        assert(alphaBefore>alphaAfter+4,
+            "A previa nao respondeu visualmente ao fluxo de tinta")
+        app.brushFlow=0.31
+        app.brushSize=43
+        local Profiles=require("src.brush_profiles")
+        -- Exercise actual UI action, persistence, reload and factory reset.
+        love.draw()
+        assert(UI:click(px+58,626),"Salvar preset nao clicavel")
+        local saved=Profiles.read()
+        assert(saved.marker and saved.marker.size==43 and
+            math.abs(saved.marker.flow-0.31)<0.001,
+            "Preset nao persistiu os ajustes editados")
+        app.brushSize=3
+        app.brushFlow=0.99
+        assert(app:choosePreset("marker") and app.brushSize==43 and
+            math.abs(app.brushFlow-0.31)<0.001,
+            "Reabrir pincel ignorou configuracao salva")
+        UI.tab="settings"
+        love.draw()
+        assert(UI:click(px+201,626),"Restaurar preset nao clicavel")
+        assert(not app.profiles.marker and app.brushSize==28,
+            "Restaurar nao recuperou preset de fabrica")
+        local restored=Profiles.read()
+        assert(not restored.marker,"Restauracao nao removeu perfil salvo")
+        print("INKORA_LIVE_PREVIEW_SAVED_PRESET_OK")
+
         UI.tab="color"
         love.draw()
         local oldColor={app.color[1],app.color[2],app.color[3]}
