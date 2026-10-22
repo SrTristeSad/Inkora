@@ -951,18 +951,53 @@ function app:importGalleryPNG(file)
     return true
 end
 
+-- Open a native ibisPaint IPV as a NEW flattened Inkora document.
+-- The original IPV is never modified. Raster/text layers and editing
+-- history are deliberately not represented as editable IPV layers.
+function app:importGalleryIPV(file)
+    local reader=require("src.ibis_ipv")
+    local ok,content=pcall(reader.readFile,file)
+    if not ok then
+        local message="Falha ao ler .ipv: "..tostring(content)
+        self.startup.error=message
+        if self.screen=="editor" then self:statusMessage(message) end
+        return false
+    end
+    local fileName=file:getFilename()
+    local pngName=fileName:gsub("%.[iI][pP][vV]$",".png")
+    local virtualPNG={
+        getFilename=function()return pngName end,
+        open=function()end,
+        read=function()return content.png end,
+        close=function()end,
+    }
+    local imported=self:importGalleryPNG(virtualPNG)
+    if imported then
+        self:statusMessage(
+            "IPV importado como imagem composta. Camadas e textos originais nao sao editaveis.")
+    end
+    return imported
+end
+
 function love.filedropped(file)
+    local extension=file:getFilename():lower()
+    if extension:match("%.ipv$") then
+        -- Opens a fresh Inkora project, even if the artist was editing
+        -- something else. Source .ipv is retained untouched.
+        app:importGalleryIPV(file)
+        return
+    end
     if app.screen~="editor" then
         if (app.screen=="gallery" or app.screen=="home") and
-            file:getFilename():lower():match("%.png$") then
+            extension:match("%.png$") then
             app:importGalleryPNG(file)
         else
-            app.startup.error="Arraste uma imagem PNG para importar."
+            app.startup.error="Arraste um PNG ou IPV para importar."
         end
         return
     end
-    if not file:getFilename():lower():match("%.png$") then
-        app:statusMessage("Somente arquivos PNG podem ser importados.")
+    if not extension:match("%.png$") then
+        app:statusMessage("Apenas arquivos PNG ou IPV podem ser importados.")
         return
     end
     if love.keyboard.isDown("lshift","rshift") then
