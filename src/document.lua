@@ -142,6 +142,60 @@ function Document.new(w, h, name)
     return self
 end
 
+-- Import decoded ibisPaint RPNG raster snapshots as SEPARATE editable
+-- Inkora layers. All caller data is validated before replacing the initial
+-- blank layer. No original IPV bytes are written or modified.
+-- A hidden composite is kept for comparison, because the external layer
+-- ordering, blend modes and visibility are not fully reconstructed.
+function Document.fromIPVRasters(width,height,name,rasters,flattenedPNG)
+    assert(type(rasters)=="table" and #rasters>=1 and #rasters<=15,
+        "IPV: numero de camadas fora do limite")
+    local flat=love.image.newImageData(love.filesystem.newFileData(
+        flattenedPNG,"ipv-composite.png"))
+    assert(flat:getWidth()==width and flat:getHeight()==height,
+        "IPV: dimensoes da referencia invalidas")
+    -- Reject all invalid geometry before allocating any project layers.
+    for _,item in ipairs(rasters) do
+        assert(type(item.id)=="number","IPV: id de camada invalido")
+        assert(item.imageData==nil or
+            (item.x>=0 and item.y>=0 and
+            item.x+item.imageData:getWidth()<=width and
+            item.y+item.imageData:getHeight()<=height),
+            "IPV: camada fora do canvas")
+    end
+    local doc=Document.new(width,height,name)
+    doc.layers={}
+    local reference=layer(width,height,"Referencia composta IPV (oculta)")
+    reference.visible=false
+    local refImage=love.graphics.newImage(flat)
+    love.graphics.push("all")
+    love.graphics.setCanvas(reference.canvas)
+    love.graphics.setBlendMode("replace","premultiplied")
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(refImage)
+    love.graphics.pop()
+    Native.invalidate(reference.canvas)
+    doc.layers[1]=reference
+    for _,item in ipairs(rasters) do
+        local current=layer(width,height,"IPV Camada "..item.id)
+        if item.imageData then
+            local img=love.graphics.newImage(item.imageData)
+            love.graphics.push("all")
+            love.graphics.setCanvas(current.canvas)
+            love.graphics.setBlendMode("replace","premultiplied")
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(img,item.x,item.y)
+            love.graphics.pop()
+            Native.invalidate(current.canvas)
+        end
+        doc.layers[#doc.layers+1]=current
+    end
+    doc.selected=#doc.layers
+    doc:markCompositeDirty()
+    doc.dirty=true
+    return doc
+end
+
 -- A rectangular brush upload invalidates only the overlapping 128px tiles.
 -- Structural edits, undos, masks and blends invalidate the entire composite.
 function Document:markCompositeDirty(region)
