@@ -349,6 +349,7 @@ function app:strokeEnd(x,y,pressure)
         drag.x,drag.y,drag.pressure=point[1],point[2],samplePressure
         self:markBrushComposite(drag)
     end
+    self.doc:trimHistory()
 end
 
 function app:selectionStart(x,y)

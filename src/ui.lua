@@ -925,10 +925,12 @@ function UI:drawWorkspaceHeader(app)
     self:print(app.doc.name or "Sem titulo",x+25,y+23,C.white,
         self.small,213)
     -- Show artists the memory footprint of actual stored history pixels.
-    -- The estimate counts RGBA tiles and legacy full snapshots only.
+    -- Logical RGBA estimate (not actual CPU memory or GPU allocations).
     local history=app.doc:historyStats()
     local memory=history.bytes/1048576
-    self:print(("Historico: %d | %.2f MiB"):format(history.steps,memory),
+    local budget=history.budgetBytes/1048576
+    local over=history.overBudget and " !" or ""
+    self:print(("Hist: %d | %.2f/%d MiB%s"):format(history.steps,memory,budget,over),
         x+23,y+59,C.muted,self.small,229)
     local bx=r-225
     self:rect(bx,y+12,213,38,C.top,10)

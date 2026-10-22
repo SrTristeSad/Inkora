@@ -4,6 +4,8 @@ Document.__index = Document
 
 local MAX_LAYERS = 16
 local MAX_HISTORY = 10
+-- Logical RGBA history budget, not a hard RAM/VRAM allocation cap.
+local HISTORY_BUDGET_BYTES = 256 * 1024 * 1024
 local COMPOSITE_TILE = 128
 local COMPOSITE_BUILD_TILE = 512
 local BLEND_MODES={"Normal","Multiply","Screen","Add","Overlay"}
@@ -111,6 +113,7 @@ function Document:ensureLayerWritable(index)
         current.canvas=cloneCanvas(current.canvas,self.width,self.height)
         -- The fresh Canvas contains existing pixels, not an empty layer.
         Native.invalidate(current.canvas)
+        self:trimHistory()
     end
     return true
 end
@@ -129,6 +132,7 @@ function Document.new(w, h, name)
         width = w, height = h, name = name or "Sem titulo",
         selected = 1, layers = {layer(w, h, "Camada 1")},
         history = {}, future = {}, dirty = false, projectKey = nil,
+        historyBudgetBytes=HISTORY_BUDGET_BYTES,
         compositeDirty=true, compositeCanvas=nil, selection=nil,
         compositeInvalidFull=true, compositeDirtyTiles={},
         compositeMetrics={fullBuilds=0,partialBuilds=0,lastTiles=0,
@@ -196,6 +200,7 @@ function Document:beginStrokeHistory()
     if #self.history>MAX_HISTORY then table.remove(self.history,1) end
     self.future={}
     self.dirty=true
+    self:trimHistory()
     return entry
 end
 
@@ -292,9 +297,28 @@ function Document:historyStats()
             end
         end
     end
+    local budget=self.historyBudgetBytes or HISTORY_BUDGET_BYTES
     return {steps=#self.history,redo=#self.future,
         strokeCount=strokeCount,fullCount=fullCount,
-        tiles=tiles,bytes=bytes,uniqueBuffers=unique}
+        tiles=tiles,bytes=bytes,uniqueBuffers=unique,
+        budgetBytes=budget,overBudget=bytes>budget}
+end
+
+-- Keep the most recent undo or redo action even when one entry alone
+-- exceeds the budget. Drop oldest undo first, then most distant redo.
+-- Called after writes/detaches and after a brush stroke has finished.
+function Document:trimHistory()
+    local budget=self.historyBudgetBytes or HISTORY_BUDGET_BYTES
+    local info=self:historyStats()
+    while info.bytes>budget and (#self.history+#self.future)>1 do
+        if #self.history>1 then
+            table.remove(self.history,1)
+        elseif #self.future>0 then
+            table.remove(self.future,1)
+        else break end
+        info=self:historyStats()
+    end
+    return info
 end
 
 function Document:checkpoint(preserveComposite)
@@ -303,6 +327,7 @@ function Document:checkpoint(preserveComposite)
     if #self.history > MAX_HISTORY then table.remove(self.history, 1) end
     self.future = {}
     self.dirty = true
+    self:trimHistory()
 end
 
 function Document:undo()
@@ -348,6 +373,7 @@ function Document:removeLayer()
     self:checkpoint()
     table.remove(self.layers, self.selected)
     self.selected = math.min(self.selected, #self.layers)
+    self:trimHistory()
     return true
 end
 
@@ -421,6 +447,7 @@ function Document:createLayerMask(index)
     if not layer or not Native.available() then return false end
     self:checkpoint()
     layer.mask=newMask(self.width,self.height,self.selection)
+    self:trimHistory()
     return true
 end
 
@@ -434,6 +461,7 @@ function Document:invertLayerMask(index)
     layer.mask:mapPixel(function(x,y,r,g,b,a)
         return 1-r,1-g,1-b,a
     end)
+    self:trimHistory()
     return true
 end
 
@@ -442,6 +470,7 @@ function Document:removeLayerMask(index)
     if not layer or not layer.mask then return false end
     self:checkpoint()
     layer.mask=nil
+    self:trimHistory()
     return true
 end
 
@@ -608,6 +637,7 @@ function Document:replaceLayerData(index, imageData)
     love.graphics.pop()
     Native.invalidate(canvas)
     self.layers[index].canvas=canvas
+    self:trimHistory()
 end
 
 -- Compoe amostras de 1 pixel das camadas visiveis.

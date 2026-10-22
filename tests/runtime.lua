@@ -614,6 +614,42 @@ local function run(app)
             newImageData(1,1,73,73,1,1):getPixel(0,0)
         assert(redoneAlpha>0.5,"Redo da pincelada de UI falhou")
         print("INKORA_UI_COW_BRUSH_UNDO_REDO_GPU_OK")
+        -- A byte budget trims old strokes while keeping most recent undo.
+        local bounded=Doc.new(384,384,"Limite logico de historico")
+        bounded.historyBudgetBytes=2*128*128*4
+        for pass=1,4 do
+            assert(bounded:beginStrokeHistory())
+            assert(bounded:captureStrokeRegion(45.5,45.5,45.5,45.5,8,0))
+            local paint=Brush.beginStroke(bounded.layers[1].canvas)
+            Brush.segment(bounded.layers[1].canvas,45.5,45.5,45.5,45.5,
+                {pass/4,0.1,0.8},8,1,false,paint)
+            bounded:trimHistory()
+        end
+        local boundedStats=bounded:historyStats()
+        assert(boundedStats.steps==2 and boundedStats.tiles==2 and
+            boundedStats.bytes==bounded.historyBudgetBytes and
+            not boundedStats.overBudget,
+            "Limite logico nao descartou pinceladas antigas")
+        assert(bounded:undo() and bounded:undo() and not bounded:undo(),
+            "Historico compactado permitiu desfazer operacao descartada")
+        assert(bounded:redo() and bounded:redo() and not bounded:redo(),
+            "Redo apos compactar historico perdeu a sequencia")
+        local over=Doc.new(384,384,"Unica operacao grande")
+        over.historyBudgetBytes=128*128*4
+        over:beginStrokeHistory()
+        assert(over:captureStrokeRegion(126.5,126.5,126.5,126.5,24,0))
+        over:trimHistory()
+        assert(over:historyStats().steps==1 and
+            over:historyStats().overBudget and #over.history[1].tiles==4,
+            "Unica operacao superior ao limite deve continuar desfazivel")
+        local structuralBudget=Doc.new(384,384,"Orcamento para snapshots")
+        structuralBudget.historyBudgetBytes=384*384*4+16
+        local blankPixels=love.image.newImageData(384,384,"rgba8")
+        for n=1,3 do structuralBudget:replaceLayerData(1,blankPixels) end
+        assert(structuralBudget:historyStats().steps==1 and
+            structuralBudget:historyStats().bytes==384*384*4,
+            "Limite logico nao removeu snapshots estruturais antigos")
+        print("INKORA_HISTORY_LOGICAL_BUDGET_GPU_OK")
         print("INKORA_STRUCTURAL_COPY_ON_WRITE_GPU_OK")
         print("INKORA_REGIONAL_BRUSH_UNDO_REDO_GPU_OK")
         print("INKORA_BOUNDED_INITIAL_COMPOSITOR_GPU_OK")
