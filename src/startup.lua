@@ -100,55 +100,120 @@ end
 function Startup:openLatest(app)
     if #self.projects>0 then app:openArtwork(self.projects[1].key) end
 end
+-- Home layout was measured against the observable ibisPaint title-screen
+-- structure: cool blue title field, centered brand, two circular navigation
+-- buttons, and a distinct darker lower content band. All Inkora branding is
+-- original. No copied logos or promotional artwork.
+local HOME_BLUE={0.146,0.278,0.435}
+local HOME_DARK={0.085,0.174,0.281}
+local HOME_OUTLINE={0.83,0.89,0.96}
+
 function Startup:drawHome(app,w,h)
-    local cx=w/2
-    self:mark(cx,h*0.27,55)
-    self:label("inkora",cx-240,h*0.37,self.fonts.logo,C.light,480,"center")
-    self:label("Crie, organize e continue suas ilustracoes",
-        cx-300,h*0.37+72,self.fonts.body,C.muted,600,"center")
-    local cw,gap=250,24
-    local left=cx-(cw*3+gap*2)/2
-    local top=math.min(h*0.58,h-255)
-    local cards={
-        {title="Minha galeria",sub="Ver e continuar suas artes",kind="open-gallery",
-            action=function()self:openGallery(app)end},
-        {title="Novo desenho",sub="Criar uma tela em branco",kind="open-create",
-            action=function()self:openCreate(app)end},
+    -- The previous three large cards were not the reference's title layout.
+    -- Scale the two navigation targets while preserving a predictable ratio.
+    love.graphics.clear(HOME_BLUE)
+    drawRect(0,0,w,h,HOME_BLUE)
+    local separator=math.floor(h*0.595)
+    drawRect(0,separator,w,h-separator,HOME_DARK)
+
+    local titleY=math.max(28,math.floor(separator*0.13))
+    self:label("inkora",w*0.15,titleY,self.fonts.logo,C.light,w*0.70,"center")
+    self:label("PINTURA DIGITAL",w*0.20,titleY+72,
+        self.fonts.small,HOME_OUTLINE,w*0.60,"center")
+    self:label("DESKTOP",w-116,17,self.fonts.small,HOME_OUTLINE,99,"right")
+
+    local radius=clamp(math.floor(math.min(w*0.073,h*0.086)),45,72)
+    local offset=math.max(radius+48,math.min(205,w*0.16))
+    local centerY=math.min(separator-109,math.max(titleY+163,separator*0.64))
+    local buttons={
+        {cx=w/2-offset,label="Minha Galeria",kind="open-gallery",
+            action=function()self:openGallery(app)end,icon="brush"},
+        {cx=w/2+offset,label="Galeria Online",kind="online-gallery",
+            action=function()
+                self.error="Galeria online: recurso ainda nao implementado no Inkora."
+            end,icon="globe"},
     }
-    for i,item in ipairs(cards) do
-        local x=left+(i-1)*(cw+gap)
-        drawRect(x,top,cw,145,C.panel,18)
-        lineRect(x,top,cw,145,C.stroke,18)
-        if i==1 then
-            for j=0,2 do
-                drawRect(x+30+j*12,top+27+j*5,41,38,C.raised,5)
-                lineRect(x+30+j*12,top+27+j*5,41,38,C.muted,5)
-            end
-        else
-            love.graphics.setColor(C.accent)
-            love.graphics.setLineWidth(4)
-            love.graphics.line(x+51,top+30,x+51,top+70)
-            love.graphics.line(x+31,top+50,x+71,top+50)
+    for _,item in ipairs(buttons) do
+        local x,y=item.cx,centerY
+        local mx,my=love.mouse.getPosition()
+        local hover=(mx-x)^2+(my-y)^2<radius*radius
+        love.graphics.setLineWidth(hover and 2.4 or 1.4)
+        love.graphics.setColor(HOME_OUTLINE)
+        love.graphics.circle("line",x,y,radius)
+        if hover then
+            love.graphics.setColor(1,1,1,0.09)
+            love.graphics.circle("fill",x,y,radius-1)
         end
-        self:label(item.title,x+14,top+87,self.fonts.heading,C.light,cw-28,"center")
-        self:label(item.sub,x+7,top+118,self.fonts.small,C.muted,cw-14,"center")
-        self:hit(x,top,cw,145,item.kind,item.action)
+        local g=radius*0.43
+        if item.icon=="globe" then
+            love.graphics.setColor(HOME_OUTLINE)
+            love.graphics.setLineWidth(2)
+            love.graphics.circle("line",x,y,g)
+            love.graphics.ellipse("line",x,y,g*0.48,g)
+            love.graphics.line(x-g,y,x+g,y)
+            love.graphics.line(x-g*0.87,y-g*0.44,x+g*0.87,y-g*0.44)
+            love.graphics.line(x-g*0.87,y+g*0.44,x+g*0.87,y+g*0.44)
+        else
+            -- Original Inkora outline brush, not the ibisPaint icon asset.
+            love.graphics.setColor(HOME_OUTLINE)
+            love.graphics.setLineWidth(3)
+            love.graphics.line(x-g*0.4,y+g*0.45,x+g*0.68,y-g*0.65)
+            love.graphics.setLineWidth(1.7)
+            love.graphics.polygon("line",
+                x+g*0.51,y-g*0.80,
+                x+g*0.82,y-g*0.53,
+                x+g*0.60,y-g*0.31,
+                x+g*0.30,y-g*0.58)
+            love.graphics.circle("line",x-g*0.52,y+g*0.62,g*0.21)
+        end
+        self:label(item.label,x-radius-65,y+radius+14,
+            self.fonts.body,C.light,(radius+65)*2,"center")
+        self:hit(x-radius-14,y-radius-10,2*(radius+14),
+            2*(radius+19),item.kind,item.action)
     end
-    local third=left+2*(cw+gap)
-    drawRect(third,top,cw,145,C.panel,18)
-    lineRect(third,top,cw,145,C.stroke,18)
-    self:label("Ultima obra",third+20,top+27,self.fonts.heading,C.light,cw-40,"center")
-    if #self.projects>0 then
-        local latest=self.projects[1]
-        self:label(latest.name,third+16,top+69,self.fonts.body,C.accent,cw-32,"center")
-        self:label("Clique para continuar",third+16,top+111,self.fonts.small,C.muted,cw-32,"center")
-        self:hit(third,top,cw,145,"open-latest",function()self:openLatest(app)end)
+    love.graphics.setLineWidth(1)
+
+    -- ibisPaint's lower area is the daily public ranking. Inkora has no
+    -- public ranking backend, so occupy the same visual region with REAL
+    -- recent local artwork only, never fictitious rankings or fake uploads.
+    self:label("Trabalhos recentes",w*0.15,separator+18,
+        self.fonts.heading,C.light,w*0.70,"center")
+    if #self.projects==0 then
+        self:label("Seus desenhos aparecerao aqui apos serem criados.",
+            w*0.2,separator+87,self.fonts.body,HOME_OUTLINE,w*0.6,"center")
+        self:button("Abrir Minha Galeria",w/2-127,separator+143,
+            254,46,"open-gallery-bottom",function()self:openGallery(app)end,false)
     else
-        self:label("Sem trabalhos ainda",third+16,top+84,self.fonts.body,C.muted,cw-32,"center")
+        local columns=math.min(4,#self.projects)
+        local gap=18
+        local cardWidth=math.min(210,math.floor((w-112-(columns-1)*gap)/columns))
+        local fullWidth=cardWidth*columns+(columns-1)*gap
+        local left=(w-fullWidth)/2
+        local cardY=separator+64
+        local cardH=math.max(70,math.min(h-separator-106,175))
+        for i=1,columns do
+            local project=self.projects[i]
+            local x=left+(i-1)*(cardWidth+gap)
+            drawRect(x,cardY,cardWidth,cardH,C.light,3)
+            local thumbnail=self:thumbnail(project)
+            if thumbnail then
+                local iw,ih=thumbnail:getDimensions()
+                local scale=math.min((cardWidth-10)/iw,(cardH-10)/ih)
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.draw(thumbnail,
+                    x+(cardWidth-iw*scale)/2,
+                    cardY+(cardH-ih*scale)/2,0,scale,scale)
+            end
+            self:label(project.name,x,cardY+cardH+10,
+                self.fonts.small,C.light,cardWidth,"center")
+            self:hit(x,cardY,cardWidth,cardH+36,"open-recent-"..i,
+                function()app:openArtwork(project.key)end)
+        end
     end
-    self:label(("%d %s salvos neste dispositivo"):format(#self.projects,
-        #self.projects==1 and "trabalho" or "trabalhos"),
-        cx-240,h-30,self.fonts.small,C.muted,480,"center")
+    if self.error then
+        self:label(self.error,w*0.12,h-28,self.fonts.small,
+            C.gold,w*0.76,"center")
+    end
 end
 function Startup:thumbnail(project)
     if not project.preview then return nil end
