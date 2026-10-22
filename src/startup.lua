@@ -188,7 +188,7 @@ function Startup:drawGallery(app,w,h)
     local columns=math.max(2,math.floor((available+gap)/257))
     local cw=(available-(columns-1)*gap)/columns
     local imageH=math.min(195,cw*0.70)
-    local ch=imageH+89,top=191
+    local ch,top=imageH+89,191
     local rows=math.ceil(#self.projects/columns)
     local viewportHeight=h-top-30
     self.galleryMaxScroll=math.max(0,rows*(ch+gap)-gap-viewportHeight)
