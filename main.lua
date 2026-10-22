@@ -5,11 +5,13 @@ local Stabilizer = require("src.stabilizer")
 local UI = require("src.ui")
 local palette = require("src.palette")
 local Native = require("src.native")
+local Presets = require("src.presets")
 
 local app = {
     tool="brush", brushSize=12, brushOpacity=1, stabilization=0.25,
     brushHardness=0.82, brushSpacing=0.18, brushTip=0,
     brushFlow=1, pressureOpacity=0.75, tipMask=nil, activeTouch=nil,
+    presetId="ink",
     fillTolerance=0.02, colorIndex=1, color=palette[1],
     zoom=1, offsetX=0, offsetY=0, dragging=nil,
     message="Bem-vindo ao Inkora! B: pincel | G: balde | I: conta-gotas",
@@ -18,8 +20,11 @@ local app = {
 local SHAPES={line=true,rectangle=true,ellipse=true}
 
 local function workspace()
+    if app.ui and app.ui.workspaceBounds then
+        return app.ui:workspaceBounds()
+    end
     local w,h=love.graphics.getDimensions()
-    return 75,59,w-281,h-35
+    return 88,73,w-332,h-44
 end
 
 local function onWorkspace(x,y)
@@ -33,6 +38,26 @@ end
 
 function app:statusMessage(message)
     self.message=message
+end
+
+-- Every library preset is mapped to real C++ stroke parameters, not merely
+-- a selected card in the UI. Custom imported tips remain supported.
+function app:choosePreset(id)
+    local p=Presets.find(id)
+    if not p then return false end
+    if p.tip==3 and not self.tipMask then return false end
+    self.presetId=p.id
+    self.brushSize=p.size
+    self.brushHardness=p.hardness
+    self.brushSpacing=p.spacing
+    self.brushOpacity=p.opacity
+    self.brushFlow=p.flow
+    self.stabilization=p.stabilization
+    self.brushTip=p.tip
+    self.pressureOpacity=p.pressureOpacity
+    self.tool="brush"
+    if self.ui then self.ui.tab="brush" end
+    return true
 end
 
 function app:fitView()
@@ -97,6 +122,7 @@ function app:loadBrushMask(bytes,persist)
     end
     self.tipMask=mask
     self.brushTip=3
+    self.presetId="custom"
     self.tool="brush"
     self.ui.tab="brush"
     self:statusMessage(("Ponta personalizada: %d x %d"):format(mask.width,mask.height))
@@ -252,6 +278,7 @@ function love.load()
     love.graphics.setBackgroundColor(0.15,0.19,0.25)
     love.keyboard.setKeyRepeat(true)
     app.ui=UI.new()
+    app:choosePreset("ink")
     app:newDocument(1280,800)
     if love.filesystem.getInfo("brushes/custom-tip.png") then
         local bytes=love.filesystem.read("brushes/custom-tip.png")
@@ -268,7 +295,7 @@ function love.load()
             love.draw()
             app.ui.tab="layers"
             love.draw()
-            require("tests.runtime").run()
+            require("tests.runtime").run(app)
         end)
         if not ok then
             io.stderr:write("INKORA_GPU_SMOKE_FAILED: "..tostring(err).."\n")
@@ -278,14 +305,40 @@ function love.load()
 end
 
 function love.draw()
-    love.graphics.clear(0.15,0.19,0.25,1)
+    love.graphics.clear(0.11,0.12,0.16,1)
     local l,t,r,b=workspace()
     love.graphics.setScissor(l,t,r-l,b-t)
+    -- Quiet patterned worktop reinforces the actual canvas boundaries.
+    love.graphics.setColor(0.135,0.148,0.19,1)
+    love.graphics.rectangle("fill",l,t,r-l,b-t)
+    love.graphics.setColor(0.16,0.17,0.21,0.45)
+    for yy=t,b,48 do
+        for xx=l,r,48 do
+            if (math.floor((yy-t)/48)+math.floor((xx-l)/48))%2==0 then
+                love.graphics.rectangle("fill",xx,yy,48,48)
+            end
+        end
+    end
     local x,y=app.offsetX,app.offsetY
     local w,h=app.doc.width*app.zoom,app.doc.height*app.zoom
     love.graphics.setColor(0.05,0.07,0.11,0.22)
     love.graphics.rectangle("fill",x+9,y+13,w,h)
     app.doc:draw(x,y,app.zoom)
+    if not app.doc.dirty and #app.doc.history==0 then
+        local centerX=x+w/2
+        local centerY=y+h/2
+        love.graphics.setColor(0.15,0.18,0.23,0.84)
+        local font=app.ui and app.ui.large or love.graphics.getFont()
+        love.graphics.setFont(font)
+        love.graphics.printf("Sua proxima arte comeca aqui",
+            centerX-200,centerY-25,400,"center")
+        if app.ui then
+            love.graphics.setFont(app.ui.small)
+            love.graphics.setColor(0.35,0.39,0.45,0.9)
+            love.graphics.printf("Escolha um pincel na biblioteca e comece a desenhar",
+                centerX-250,centerY+13,500,"center")
+        end
+    end
     love.graphics.setColor(0.45,0.50,0.55,0.55)
     love.graphics.rectangle("line",x-0.5,y-0.5,w+1,h+1)
 
@@ -325,10 +378,12 @@ function love.draw()
         and app.tool~="picker" then
         local mx,my=love.mouse.getPosition()
         if onWorkspace(mx,my) then
-            love.graphics.setColor(0.20,0.85,0.85,0.75)
+            local radius=math.max(2,app.brushSize*app.zoom/2)
+            love.graphics.setColor(app.color[1],app.color[2],app.color[3],0.18)
+            love.graphics.circle("fill",mx,my,radius)
+            love.graphics.setColor(0.95,0.96,0.98,0.85)
             love.graphics.setLineWidth(1)
-            love.graphics.circle("line",mx,my,
-                math.max(2,app.brushSize*app.zoom/2))
+            love.graphics.circle("line",mx,my,radius)
         end
     end
     app.ui:draw(app)
@@ -426,6 +481,7 @@ end
 function love.wheelmoved(_,y)
     if app.ui.modal or y==0 then return end
     local x,my=love.mouse.getPosition()
+    if app.ui:mousewheel(x,y) then return end
     if love.keyboard.isDown("lshift","rshift") then
         app.brushSize=math.max(1,math.min(120,app.brushSize+(y>0 and 2 or -2)))
     else app:zoomAt(1.15^y,x,my) end
@@ -437,6 +493,10 @@ function love.keypressed(key,_,isrepeat)
     local shift=love.keyboard.isDown("lshift","rshift")
     if ctrl and key=="z" then app.doc:undo()
     elseif ctrl and key=="y" then app.doc:redo()
+    elseif key=="tab" and not ctrl then
+        app.ui.tab=app.ui.tab=="brush" and "layers" or "brush"
+    elseif key=="c" and not ctrl then
+        app.ui.tab="color"
     elseif ctrl and key=="d" then
         app.doc:clearSelection()
         app:statusMessage("Selecao removida.")

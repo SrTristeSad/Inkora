@@ -1,14 +1,16 @@
 local palette = require("src.palette")
 local Document = require("src.document")
+local Presets = require("src.presets")
 local UI = {}
 UI.__index = UI
 
 local C = {
-    top={0.080,0.106,0.155}, side={0.100,0.133,0.190},
-    panel={0.090,0.118,0.172}, surface={0.145,0.187,0.256},
-    surface2={0.175,0.219,0.299}, accent={0.260,0.800,0.789},
-    white={0.937,0.963,0.980}, muted={0.625,0.692,0.756},
-    divider={0.223,0.280,0.350}, red={0.910,0.370,0.397},
+    top={0.067,0.076,0.105}, side={0.089,0.100,0.137},
+    panel={0.100,0.109,0.149}, surface={0.151,0.166,0.215},
+    surface2={0.204,0.222,0.279}, accent={0.44,0.82,0.91},
+    white={0.954,0.960,0.974}, muted={0.63,0.68,0.75},
+    divider={0.226,0.247,0.31}, red={0.95,0.45,0.50},
+    peach={0.99,0.74,0.56}, green={0.64,0.86,0.68},
 }
 
 local function color(c,alpha)
@@ -24,6 +26,7 @@ local function clamp(v,a,b) return math.max(a,math.min(b,v)) end
 function UI.new()
     return setmetatable({
         hits={}, modal=nil, draggingSlider=nil, tab="brush",
+        layerScroll=0, hue=0.55, saturation=0.75, brightness=0.9,
         font=love.graphics.newFont(14),
         small=love.graphics.newFont(12),
         large=love.graphics.newFont(21),
@@ -224,218 +227,536 @@ function UI:drawModal(app)
     end
 end
 
-function UI:drawToolbar(app,w,h,right)
-    self:rect(0,0,w,58,C.top)
-    self:rect(0,58,74,h-92,C.side)
-    self:rect(right,58,280,h-92,C.panel)
-    self:rect(0,h-34,w,34,C.top)
-    self:rect(74,58,1,h-92,C.divider)
-    self:rect(right,58,1,h-92,C.divider)
-    self:print("INKORA",18,16,C.accent,self.large)
-    self:button(173,10,75,37,"Novo",function() self:askNew(app) end)
-    self:button(258,10,78,37,"Salvar",function()
-        if app.doc.projectKey then app:saveProject(app.doc.name)
-        else self:askSave(app) end
-    end)
-    self:button(346,10,75,37,"Abrir",function() self:askOpen(app) end)
-    self:button(431,10,91,37,"PNG",function() app:exportPNG() end)
-    self:button(540,10,69,37,"Voltar",function() app.doc:undo() end)
-    self:button(618,10,77,37,"Refazer",function() app.doc:redo() end)
-    self:button(707,10,95,37,"Ajustar",function() app:fitView() end)
 
-    self:print("FERRAMENTAS",5,77,C.muted,self.small,65,"center")
-    local tools={
-        {"Pincel","brush","B"}, {"Apagar","eraser","E"},
-        {"Mover","hand","H"}, {"Balde","fill","G"},
-        {"Amostra","picker","I"}, {"Linha","line","L"},
-        {"Retangulo","rectangle","R"}, {"Elipse","ellipse","O"},
-        {"Selecao","select","M"},
+-- App-specific workspace sizing is shared with main.lua.
+function UI:workspaceBounds()
+    local w,h=love.graphics.getDimensions()
+    return 88,73,w-332,h-44
+end
+
+local TOOLS={
+    {"Pincel","brush","B"},{"Borracha","eraser","E"},
+    {"Mover tela","hand","H"},{"Balde","fill","G"},
+    {"Conta-gotas","picker","I"},{"Linha","line","L"},
+    {"Retangulo","rectangle","R"},{"Elipse","ellipse","O"},
+    {"Selecao","select","M"}
+}
+
+local function hsvRgb(h,s,v)
+    local i=math.floor(h*6)
+    local f=h*6-i
+    local p=v*(1-s)
+    local q=v*(1-f*s)
+    local t=v*(1-(1-f)*s)
+    i=i%6
+    if i==0 then return {v,t,p}
+    elseif i==1 then return {q,v,p}
+    elseif i==2 then return {p,v,t}
+    elseif i==3 then return {p,q,v}
+    elseif i==4 then return {t,p,v}
+    else return {v,p,q} end
+end
+
+local function rgbHsv(rgb)
+    local r,g,b=rgb[1],rgb[2],rgb[3]
+    local hi=math.max(r,g,b)
+    local lo=math.min(r,g,b)
+    local delta=hi-lo
+    local h=0
+    if delta>0 then
+        if hi==r then h=((g-b)/delta)%6
+        elseif hi==g then h=(b-r)/delta+2
+        else h=(r-g)/delta+4 end
+        h=h/6
+    end
+    return h,hi==0 and 0 or delta/hi,hi
+end
+
+local function applyColor(app,rgb)
+    app.color=rgb
+    app.colorIndex=nil
+    if app.tool=="eraser" then app.tool="brush" end
+end
+
+function UI:toolIcon(kind,x,y)
+    color(C.white)
+    love.graphics.setLineWidth(2.4)
+    if kind=="brush" then
+        love.graphics.line(x-8,y+7,x+5,y-8,x+9,y-4,x-4,y+10,x-9,y+11,x-8,y+7)
+    elseif kind=="eraser" then
+        love.graphics.polygon("line",x-10,y+3,x+1,y-9,x+10,y,x-1,y+11)
+    elseif kind=="hand" then
+        love.graphics.rectangle("line",x-7,y-1,14,13,3)
+        for dx=-5,5,5 do love.graphics.line(x+dx,y-1,x+dx,y-10) end
+    elseif kind=="fill" then
+        love.graphics.polygon("line",x-10,y-4,x,y-13,x+10,y-3,x,y+8)
+        love.graphics.circle("fill",x+9,y+11,3)
+    elseif kind=="picker" then
+        love.graphics.line(x-9,y+9,x+9,y-9)
+        love.graphics.circle("line",x+7,y-8,4)
+    elseif kind=="line" then love.graphics.line(x-10,y+9,x+10,y-9)
+    elseif kind=="rectangle" then love.graphics.rectangle("line",x-10,y-8,20,16,2)
+    elseif kind=="ellipse" then love.graphics.ellipse("line",x,y,11,8)
+    elseif kind=="select" then
+        love.graphics.setLineStyle("rough")
+        love.graphics.rectangle("line",x-10,y-9,20,18)
+        love.graphics.setLineStyle("smooth")
+    end
+    love.graphics.setLineWidth(1)
+end
+
+function UI:drawToolbar(app,w,h,right)
+    self:rect(0,0,w,64,C.top)
+    self:rect(0,64,80,h-100,C.side)
+    self:rect(right,64,w-right,h-100,C.panel)
+    self:rect(0,h-36,w,36,C.top)
+    self:rect(79,64,1,h-100,C.divider)
+    self:rect(right,64,1,h-100,C.divider)
+
+    self:rect(15,13,36,36,C.accent,11)
+    love.graphics.setColor(0.08,0.13,0.18,1)
+    love.graphics.setLineWidth(3)
+    love.graphics.line(25,38,39,25)
+    love.graphics.line(30,42,44,30)
+    love.graphics.setLineWidth(1)
+    self:print("inkora",60,16,C.white,self.large)
+    if right>=870 then
+        self:print(app.doc.name or "Sem titulo",212,17,C.muted,self.font,right-725)
+    end
+
+    local actions={
+        {"Novo",function() self:askNew(app) end},
+        {"Abrir",function() self:askOpen(app) end},
+        {"Salvar",function() if app.doc.projectKey then
+            app:saveProject(app.doc.name) else self:askSave(app) end end},
+        {"PNG",function() app:exportPNG() end},
+        {"Desf.",function() app.doc:undo() end},
+        {"Ref.",function() app.doc:redo() end}
     }
-    for i,t in ipairs(tools) do
-        local yy=103+(i-1)*56
-        self:button(8,yy,58,30,t[3],function()
-            app.tool=t[2]
-        end,app.tool==t[2] and "primary" or nil)
-        self:print(t[1],4,yy+33,C.muted,self.small,66,"center")
+    local start=right-466
+    for i,a in ipairs(actions) do
+        self:button(start+(i-1)*77,13,71,37,a[1],a[2],i==3 and "primary" or "ghost")
+    end
+
+    for i,t in ipairs(TOOLS) do
+        local top=86+(i-1)*math.min(64,(h-173)/#TOOLS)
+        if top+51<h-52 then
+            local selected=app.tool==t[2]
+            if selected then self:rect(6,top,68,53,C.surface2,12)
+                self:rect(6,top+8,3,35,C.accent,2)
+            end
+            self:toolIcon(t[2],40,top+18)
+            self:print(t[3],8,top+36,selected and C.accent or C.muted,
+                self.small,64,"center")
+            self:register(6,top,68,53,function()
+                app.tool=t[2]
+                if t[2]=="brush" or t[2]=="eraser" then
+                    self.tab="brush"
+                end
+            end)
+        end
+    end
+end
+
+function UI:drawStrokePreview(kind,x,y,width)
+    -- Procedural visual preview: rendered by the UI, never copied assets.
+    local innerX=x+9
+    local innerY=y+11
+    local steps=19
+    if kind=="pixel" then
+        color(C.accent)
+        for i=0,steps do
+            local a=i/steps
+            love.graphics.rectangle("fill",innerX+a*width,
+                innerY+9+math.sin(a*5)*4,3,3)
+        end
+    elseif kind=="soft" then
+        for radius=10,2,-2 do
+            love.graphics.setColor(0.43,0.83,0.92,0.12)
+            for i=0,steps do
+                local a=i/steps
+                love.graphics.circle("fill",innerX+a*width,
+                    innerY+11+math.sin(a*4.3)*5,radius)
+            end
+        end
+    elseif kind=="grain" or kind=="pencil" then
+        for i=0,steps*3 do
+            local a=i/(steps*3)
+            local jitter=math.sin(i*9.71)*3
+            love.graphics.setColor(0.66,0.86,0.94,
+                kind=="grain" and 0.65 or 0.54)
+            love.graphics.circle("fill",innerX+a*width,
+                innerY+12+math.sin(a*4.3)*5+jitter,
+                kind=="grain" and 2 or 1.1)
+        end
+    elseif kind=="flat" then
+        for i=0,steps do
+            local a=i/steps
+            love.graphics.setColor(0.63,0.86,0.91,0.84)
+            love.graphics.rectangle("fill",innerX+a*width,
+                innerY+7+math.sin(a*4.3)*3,4,12)
+        end
+    else
+        love.graphics.setLineWidth(kind=="paint" and 6 or 3.8)
+        love.graphics.setColor(0.64,0.87,0.95,kind=="paint" and 0.60 or 1)
+        local points={}
+        for i=0,steps do
+            local a=i/steps
+            points[#points+1]=innerX+a*width
+            points[#points+1]=innerY+13+math.sin(a*4.3)*5
+        end
+        love.graphics.line(points)
+        love.graphics.setLineWidth(1)
     end
 end
 
 function UI:drawBrushPanel(app,x,w,h)
-    self:print("PINCEL / FERRAMENTA",x,139,C.white)
-    local brushName=({
-        brush="Pintura C++",eraser="Borracha C++",hand="Navegacao",
-        fill="Balde (camada atual)",picker="Conta-gotas (visivel)",
-        line="Linha reta",rectangle="Retangulo",ellipse="Elipse",
-    })[app.tool] or app.tool
-    self:print(brushName,x,163,C.muted,self.small)
-    self:slider(x+6,202,w-12,(app.brushSize-1)/119,"Espessura",function(v)
-        app.brushSize=math.max(1,math.floor(1+v*119+0.5))
-    end,tostring(app.brushSize).." px")
-    self:slider(x+6,249,w-12,app.brushOpacity,"Opacidade",function(v)
-        app.brushOpacity=math.max(0.05,v)
-    end,tostring(math.floor(app.brushOpacity*100+0.5)).."%")
-    self:slider(x+6,296,w-12,app.brushFlow,"Fluxo por carimbo",function(v)
-        app.brushFlow=math.max(0.01,v)
-    end,tostring(math.floor(app.brushFlow*100+0.5)).."%")
-    self:slider(x+6,343,w-12,app.pressureOpacity,"Influencia da pressao",function(v)
-        app.pressureOpacity=v
-    end,tostring(math.floor(app.pressureOpacity*100+0.5)).."%")
-    self:slider(x+6,390,w-12,app.stabilization,"Estabilizacao",function(v)
-        app.stabilization=v
-    end,tostring(math.floor(app.stabilization*100+0.5)).."%")
-    self:slider(x+6,437,w-12,app.brushHardness,"Dureza da ponta",function(v)
-        app.brushHardness=v
-    end,tostring(math.floor(app.brushHardness*100+0.5)).."%")
-    if app.tool=="fill" then
-        self:slider(x+6,484,w-12,app.fillTolerance/0.3,"Tolerancia do balde",function(v)
-            app.fillTolerance=v*0.3
-        end,tostring(math.floor(app.fillTolerance*100+0.5)).."%")
-    else
-        self:slider(x+6,484,w-12,(app.brushSpacing-0.03)/0.47,"Espacamento",function(v)
-            app.brushSpacing=0.03+v*0.47
-        end,tostring(math.floor(app.brushSpacing*100+0.5)).."%")
-    end
-    self:print("CORES",x,518,C.white)
-    self:rect(x+188,516,50,20,app.color,5)
-    for i,swatch in ipairs(palette) do
-        local col,row=(i-1)%6,math.floor((i-1)/6)
-        local bx,by=x+col*40,540+row*32
-        if app.colorIndex==i then
+    self:print("BIBLIOTECA DE PINCEIS",x,155,C.white)
+    self:print("Escolha o traco antes de desenhar",x,180,C.muted,self.small)
+    local itemWidth=(w-9)/2
+    for i,preset in ipairs(Presets) do
+        local col=(i-1)%2
+        local row=math.floor((i-1)/2)
+        local px=x+col*(itemWidth+9)
+        local py=208+row*69
+        local active=app.presetId==preset.id
+        self:rect(px,py,itemWidth,62,active and C.surface2 or C.surface,10)
+        if active then
             color(C.accent)
-            love.graphics.rectangle("line",bx-3,by-3,34,30,6,6)
+            love.graphics.setLineWidth(1.5)
+            love.graphics.rectangle("line",px+0.5,py+0.5,itemWidth-1,61,10)
+            love.graphics.setLineWidth(1)
         end
-        self:rect(bx,by,28,25,swatch,5)
-        self:register(bx-3,by-3,34,29,function()
-            app.colorIndex=i;app.color=swatch
-            if app.tool=="eraser" then app.tool="brush" end
+        self:drawStrokePreview(preset.preview,px+4,py+5,itemWidth-27)
+        self:print(preset.name,px+7,py+39,C.white,self.small,itemWidth-13)
+        self:register(px,py,itemWidth,62,function()
+            if app:choosePreset(preset.id) then
+                app:statusMessage("Pincel: "..preset.name)
+            else
+                app:statusMessage("Ponta PNG: Shift + arraste uma imagem para importar")
+            end
         end)
     end
-    self:print("PONTA C++",x,642,C.white,self.small)
-    local tips={{"Red.",0},{"Chata",1},{"Grao",2},{"PNG",3}}
-    for i,t in ipairs(tips) do
-        local bx=x+(i-1)*61
-        self:button(bx,661,56,28,t[1],function()
-            if t[2]==3 and not app.tipMask then
-                app:statusMessage("Segure Shift e arraste PNG para criar uma ponta")
-                return
-            end
-            app.brushTip=t[2]
-            app:statusMessage("Ponta C++: "..t[1])
-        end,app.brushTip==t[2] and "primary" or nil)
+    self:print("CONTROLE RAPIDO",x,489,C.muted,self.small)
+    self:slider(x+9,532,w-20,(app.brushSize-1)/119,"Tamanho",function(v)
+        app.brushSize=math.max(1,math.floor(1+v*119+0.5))
+    end,tostring(app.brushSize).." px")
+    self:slider(x+9,583,w-20,app.brushOpacity,"Opacidade",function(v)
+        app.brushOpacity=math.max(0.03,v)
+    end,tostring(math.floor(app.brushOpacity*100+0.5)).."%")
+    self:print("CORES RECENTES",x,h-145,C.muted,self.small)
+    self:drawSwatches(app,x,h-120,w)
+end
+
+function UI:drawSwatches(app,x,y,w)
+    local cell=(w-6)/#palette
+    if cell<14 then cell=14 end
+    for i,swatch in ipairs(palette) do
+        local col=(i-1)%8
+        local row=math.floor((i-1)/8)
+        local xx=x+col*math.min(34,(w-2)/8)
+        local yy=y+row*29
+        self:rect(xx,yy,23,23,swatch,6)
+        if app.colorIndex==i then
+            color(C.accent)
+            love.graphics.rectangle("line",xx-2,yy-2,27,27,7)
+        end
+        self:register(xx-1,yy-1,26,26,function()
+            applyColor(app,swatch)
+            app.colorIndex=i
+            self.hue,self.saturation,self.brightness=rgbHsv(swatch)
+        end)
     end
-    self:print("Shift + arrastar PNG = importar ponta",x,700,C.muted,self.small)
+end
+
+function UI:drawSettings(app,x,w,h)
+    self:print("AJUSTES DO PINCEL",x,155,C.white)
+    self:print("Parametros aplicados ao motor C++",x,181,C.muted,self.small)
+    local controls={
+        {"Espessura",(app.brushSize-1)/119,function(v)
+            app.brushSize=math.max(1,math.floor(1+v*119+0.5))
+        end,tostring(app.brushSize).." px"},
+        {"Opacidade",app.brushOpacity,function(v)
+            app.brushOpacity=math.max(0.03,v)
+        end,tostring(math.floor(app.brushOpacity*100+0.5)).."%"},
+        {"Fluxo por carimbo",app.brushFlow,function(v)
+            app.brushFlow=math.max(0.01,v)
+        end,tostring(math.floor(app.brushFlow*100+0.5)).."%"},
+        {"Dureza",app.brushHardness,function(v) app.brushHardness=v end,
+            tostring(math.floor(app.brushHardness*100+0.5)).."%"},
+        {"Espacamento",(app.brushSpacing-0.03)/0.47,function(v)
+            app.brushSpacing=0.03+v*0.47
+        end,tostring(math.floor(app.brushSpacing*100+0.5)).."%"},
+        {"Estabilizacao",app.stabilization,function(v)
+            app.stabilization=v
+        end,tostring(math.floor(app.stabilization*100+0.5)).."%"},
+        {"Pressao na opacidade",app.pressureOpacity,function(v)
+            app.pressureOpacity=v
+        end,tostring(math.floor(app.pressureOpacity*100+0.5)).."%"},
+    }
+    for i,c in ipairs(controls) do
+        self:slider(x+10,224+(i-1)*53,w-22,c[2],c[1],c[3],c[4])
+    end
+    self:print("PONTA DO PINCEL",x,h-127,C.muted,self.small)
+    for i,item in ipairs({{"Red.",0},{"Chata",1},{"Grao",2},{"PNG",3}}) do
+        local bx=x+(i-1)*69
+        self:button(bx,h-105,62,30,item[1],function()
+            if item[2]==3 and not app.tipMask then
+                app:statusMessage("Shift + arraste PNG para criar a ponta")
+            else app.brushTip=item[2];app.tool="brush" end
+        end,app.brushTip==item[2] and "primary" or nil)
+    end
+end
+
+function UI:drawColorPanel(app,x,w,h)
+    self:print("ESTUDIO DE CORES",x,155,C.white)
+    self:print("Toque no anel ou no quadrado",x,180,C.muted,self.small)
+    local cx,cy=x+w/2,340
+    local outer,inner=109,90
+    local steps=72
+    for i=0,steps-1 do
+        local t=i/steps
+        local nextT=(i+1)/steps
+        local a=t*2*math.pi
+        local b=nextT*2*math.pi
+        local rgb=hsvRgb(t,1,1)
+        love.graphics.setColor(rgb[1],rgb[2],rgb[3],1)
+        love.graphics.polygon("fill",
+            cx+math.cos(a)*inner,cy+math.sin(a)*inner,
+            cx+math.cos(a)*outer,cy+math.sin(a)*outer,
+            cx+math.cos(b)*outer,cy+math.sin(b)*outer,
+            cx+math.cos(b)*inner,cy+math.sin(b)*inner)
+    end
+    local sq=130
+    local px,py=cx-sq/2,cy-sq/2
+    local grid=17
+    for gy=0,grid-1 do
+        for gx=0,grid-1 do
+            local rgb=hsvRgb(self.hue,gx/(grid-1),1-gy/(grid-1))
+            love.graphics.setColor(rgb[1],rgb[2],rgb[3],1)
+            love.graphics.rectangle("fill",px+gx*sq/grid,py+gy*sq/grid,
+                sq/grid+0.5,sq/grid+0.5)
+        end
+    end
+    color(C.white)
+    love.graphics.rectangle("line",px-1,py-1,sq+2,sq+2,4)
+    local markX=px+self.saturation*sq
+    local markY=py+(1-self.brightness)*sq
+    love.graphics.setColor(0,0,0,1)
+    love.graphics.circle("line",markX,markY,6)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.circle("line",markX,markY,5)
+    self:register(cx-outer,cy-outer,outer*2,outer*2,function(xx,yy)
+        local dx,dy=xx-cx,yy-cy
+        local distance=math.sqrt(dx*dx+dy*dy)
+        if distance>inner-5 then
+            local atan2=math.atan2
+            local angle
+            if atan2 then angle=atan2(dy,dx)
+            else
+                angle=math.atan(dy/(math.abs(dx)<0.0001 and 0.0001 or dx))
+                if dx<0 then angle=angle+math.pi end
+            end
+            self.hue=(angle/(2*math.pi))%1
+        else
+            self.saturation=clamp((xx-px)/sq,0,1)
+            self.brightness=clamp(1-(yy-py)/sq,0,1)
+        end
+        applyColor(app,hsvRgb(self.hue,self.saturation,self.brightness))
+    end)
+    self:print("COR ATUAL",x,485,C.muted,self.small)
+    self:rect(x,510,w,68,C.surface,11)
+    self:rect(x+9,520,48,48,app.color,9)
+    local r,g,b=app.color[1],app.color[2],app.color[3]
+    self:print(("R %03d   G %03d   B %03d"):format(
+        math.floor(r*255+0.5),math.floor(g*255+0.5),math.floor(b*255+0.5)),
+        x+70,535,C.white,self.small,w-77)
+    self:print("PALETA",x,609,C.muted,self.small)
+    self:drawSwatches(app,x,639,w)
+end
+
+local function thumbnail(canvas,x,y,w,h)
+    color({0.84,0.84,0.86})
+    love.graphics.rectangle("fill",x,y,w,h,5)
+    color({0.67,0.67,0.72})
+    for row=0,2 do for col=0,3 do
+        if (row+col)%2==0 then
+            love.graphics.rectangle("fill",x+col*w/4,y+row*h/3,w/4,h/3)
+        end
+    end end
+    local bw,bh=canvas:getDimensions()
+    local factor=math.min(w/bw,h/bh)
+    local dx=x+(w-bw*factor)/2
+    local dy=y+(h-bh*factor)/2
+    love.graphics.push("all")
+    love.graphics.setScissor(x,y,w,h)
+    love.graphics.setBlendMode("alpha","premultiplied")
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(canvas,dx,dy,0,factor,factor)
+    love.graphics.pop()
+    color(C.divider)
+    love.graphics.rectangle("line",x,y,w,h,5)
 end
 
 function UI:drawLayersPanel(app,x,w,h)
     local doc=app.doc
-    self:print("CAMADAS",x,143,C.white)
-    self:print(tostring(#doc.layers).." / 16 camadas",x,170,C.muted,self.small)
-    self:button(x,204,51,32,"+",function()
-        if not doc:addLayer() then app:statusMessage("Limite de 16 camadas") end
-    end)
-    self:button(x+61,204,51,32,"-",function()
-        if not doc:removeLayer() then app:statusMessage("Nao e possivel excluir a ultima camada") end
-    end)
-    self:button(x+122,204,51,32,"Cima",function() doc:moveLayer(1) end)
-    self:button(x+183,204,57,32,"Baixo",function() doc:moveLayer(-1) end)
-    self:print("Toque em uma camada para editar",x,251,C.muted,self.small)
-    local rows=math.max(1,math.floor((h-625)/46))
-    local top=math.min(#doc.layers,math.max(rows,doc.selected+rows-1))
-    for r=1,math.min(rows,#doc.layers) do
-        local index=top-r+1
-        if index>=1 then
-            local layer=doc.layers[index]
-            local yy=278+(r-1)*46
-            self:rect(x,yy,w,41,index==doc.selected and C.surface2 or C.surface,6)
-            self:button(x+5,yy+5,47,31,layer.visible and "Ver" or "Off",function()
-                doc:toggleLayer(index)
-            end,"ghost")
-            self:print(layer.name,x+61,yy+7,index==doc.selected and C.accent or C.white,self.small)
-            self:print(tostring(math.floor(layer.opacity*100+0.5)).."%"
-                ..(layer.mask and " M" or "")..(layer.clipping and " C" or ""),
-                x+61,yy+23,C.muted,self.small)
-            self:register(x+57,yy,w-57,41,function()
-                doc.selected=index
-            end)
+    self:print("PILHA DE CAMADAS",x,155,C.white)
+    self:print(("%d / 16  |  edicao nao destrutiva"):format(#doc.layers),
+        x,181,C.muted,self.small)
+    self:button(x,207,63,32,"+ Nova",function()
+        if doc:addLayer() then self.layerScroll=0
+        else app:statusMessage("Maximo de 16 camadas") end
+    end,"primary")
+    self:button(x+70,207,56,32,"Excluir",function()
+        if not doc:removeLayer() then
+            app:statusMessage("Deixe ao menos uma camada")
         end
-    end
-    local layer=doc.layers[doc.selected]
-    if layer then
-        self:print("MASCARA DE CAMADA",x,h-375,C.muted,self.small)
-        self:button(x,h-352,78,31,layer.mask and "Recriar" or "Criar",function()
-            if doc:createLayerMask(doc.selected) then
-                app:statusMessage(doc.selection and
-                    "Mascara criada a partir da selecao" or
-                    "Mascara branca criada")
-            else app:statusMessage("Mascaras exigem o motor C++ v7") end
-        end,layer.mask and "primary" or nil)
-        self:button(x+84,h-352,72,31,"Inverter",function()
-            if not doc:invertLayerMask(doc.selected) then
-                app:statusMessage("Primeiro crie uma mascara")
-            end
-        end)
-        self:button(x+162,h-352,78,31,"Remover",function()
-            if not doc:removeLayerMask(doc.selected) then
-                app:statusMessage("Nenhuma mascara nesta camada")
-            end
-        end)
-        self:button(x,h-301,240,32,
-            layer.clipping and "Clipping: LIGADO" or "Clipping: DESLIGADO",
-            function()
-                if doc:setClipping(doc.selected,not layer.clipping) then
-                    app:statusMessage(not layer.clipping and
-                        "Clipping desligado" or "Clipping ligado")
-                else app:statusMessage("Clipping requer camada abaixo e C++ v7") end
-            end,layer.clipping and "primary" or nil)
-        self:button(x,h-227,240,32,
-            layer.alphaLock and "Alpha Lock: LIGADO" or "Alpha Lock: DESLIGADO",
-            function()
-                doc:setLayerAlphaLock(doc.selected,not layer.alphaLock)
-                app:statusMessage(layer.alphaLock and "Alpha Lock ligado" or "Alpha Lock desligado")
-            end,layer.alphaLock and "primary" or nil)
-        self:print("MODO DE MESCLAGEM",x,h-175,C.muted,self.small)
-        local modes=doc.BLEND_MODES
-        local index=(layer.blendMode or 0)+1
-        self:button(x,h-148,34,29,"<",function()
-            local target=(index-2)%#modes
-            if not doc:setLayerBlend(doc.selected,target) then
-                app:statusMessage("Este modo requer o motor C++ v5")
-            end
-        end)
-        self:button(x+206,h-148,34,29,">",function()
-            local target=index%#modes
-            if not doc:setLayerBlend(doc.selected,target) then
-                app:statusMessage("Este modo requer o motor C++ v5")
-            end
-        end)
-        self:print(modes[index],x+38,h-139,C.white,self.small,164,"center")
-        self:slider(x+6,h-90,w-12,layer.opacity,"Opacidade da camada",function(v)
-            doc:setLayerOpacity(doc.selected,v,true)
-        end,tostring(math.floor(layer.opacity*100+0.5)).."%",function()
-            doc:checkpoint()
+    end)
+    self:button(x+133,207,57,32,"Subir",function() doc:moveLayer(1) end)
+    self:button(x+197,207,78,32,"Descer",function() doc:moveLayer(-1) end)
+    local y0=253
+    local endY=h-327
+    self:rect(x,y0,w,math.max(72,endY-y0),C.top,8)
+    local visible=math.max(1,math.floor((endY-y0-4)/65))
+    local offset=clamp(self.layerScroll,0,math.max(0,#doc.layers-visible))
+    self.layerScroll=offset
+    for row=1,math.min(visible,#doc.layers) do
+        local index=#doc.layers-offset-row+1
+        local layer=doc.layers[index]
+        local yy=y0+4+(row-1)*65
+        local active=doc.selected==index
+        self:rect(x+4,yy,w-8,60,active and C.surface2 or C.surface,8)
+        if active then self:rect(x+4,yy+6,3,48,C.accent,2) end
+        thumbnail(layer.canvas,x+13,yy+9,52,42)
+        self:print(layer.name,x+76,yy+8,active and C.white or C.muted,
+            self.small,w-118)
+        local flags={}
+        if layer.alphaLock then flags[#flags+1]="Alpha" end
+        if layer.mask then flags[#flags+1]="Mascara" end
+        if layer.clipping then flags[#flags+1]="Clip" end
+        self:print(("%d%%  %s"):format(math.floor(layer.opacity*100+0.5),
+            table.concat(flags," / ")),x+76,yy+32,C.muted,self.small,w-116)
+        self:button(x+w-38,yy+16,30,29,layer.visible and "V" or "-",function()
+            doc:toggleLayer(index)
+        end,layer.visible and "ghost" or nil)
+        self:register(x+10,yy+5,w-54,52,function()
+            doc.selected=index
         end)
     end
+    if #doc.layers>visible then
+        self:button(x,endY+3,105,25,"Mais acima",function()
+            self.layerScroll=clamp(self.layerScroll+1,0,#doc.layers-visible)
+        end)
+        self:button(x+170,endY+3,105,25,"Mais abaixo",function()
+            self.layerScroll=clamp(self.layerScroll-1,0,#doc.layers-visible)
+        end)
+    end
+    local active=doc.layers[doc.selected]
+    if not active then return end
+    local base=h-289
+    self:print("PROPRIEDADES",x,base,C.muted,self.small)
+    self:button(x,base+23,134,31,
+        active.alphaLock and "Alpha Lock ON" or "Alpha Lock",
+        function() doc:setLayerAlphaLock(doc.selected,not active.alphaLock) end,
+        active.alphaLock and "primary" or nil)
+    self:button(x+142,base+23,134,31,
+        active.clipping and "Clipping ON" or "Clipping",
+        function()
+            if not doc:setClipping(doc.selected,not active.clipping) then
+                app:statusMessage("Clipping exige camada abaixo e C++")
+            end
+        end,active.clipping and "primary" or nil)
+    self:print("Mascara da camada",x,base+67,C.muted,self.small)
+    self:button(x,base+85,85,30,active.mask and "Recriar" or "Criar",function()
+        doc:createLayerMask(doc.selected)
+    end)
+    self:button(x+95,base+85,85,30,"Inverter",function()
+        if not doc:invertLayerMask(doc.selected) then
+            app:statusMessage("Crie a mascara antes")
+        end
+    end)
+    self:button(x+190,base+85,85,30,"Remover",function()
+        doc:removeLayerMask(doc.selected)
+    end)
+    self:print("Mesclagem",x,base+140,C.muted,self.small)
+    local mode=(active.blendMode or 0)+1
+    self:button(x,base+163,35,32,"<",function()
+        doc:setLayerBlend(doc.selected,(mode-2)%#doc.BLEND_MODES)
+    end)
+    self:rect(x+40,base+163,w-80,32,C.surface,6)
+    self:print(doc.BLEND_MODES[mode],x+42,base+172,C.white,
+        self.small,w-84,"center")
+    self:button(x+w-35,base+163,35,32,">",function()
+        doc:setLayerBlend(doc.selected,mode%#doc.BLEND_MODES)
+    end)
+    self:slider(x+10,base+232,w-20,active.opacity,"Opacidade da camada",function(v)
+        doc:setLayerOpacity(doc.selected,v,true)
+    end,tostring(math.floor(active.opacity*100+0.5)).."%",function()
+        doc:checkpoint()
+    end)
+end
+
+function UI:drawWorkspaceHeader(app)
+    local x,y,r= self:workspaceBounds()
+    local z=app.zoom
+    self:rect(x+13,y+12,242,38,C.top,10)
+    self:print(app.doc.name or "Sem titulo",x+25,y+23,C.white,
+        self.small,213)
+    local bx=r-225
+    self:rect(bx,y+12,213,38,C.top,10)
+    self:button(bx+6,y+16,33,29,"-",function()
+        local mx,my=love.graphics.getDimensions()
+        app:zoomAt(1/1.2,(x+r)/2,y+(my-y-44)/2)
+    end,"ghost")
+    self:print(("%d%%"):format(math.floor(z*100+0.5)),bx+47,y+25,C.white,
+        self.small,66,"center")
+    self:button(bx+119,y+16,33,29,"+",function()
+        local mx,my=love.graphics.getDimensions()
+        app:zoomAt(1.2,(x+r)/2,y+(my-y-44)/2)
+    end,"ghost")
+    self:button(bx+159,y+16,48,29,"Tela",function() app:fitView() end,"ghost")
 end
 
 function UI:draw(app)
     self.hits={}
-    love.graphics.push("all")
     local w,h=love.graphics.getDimensions()
-    local right=w-280
+    local right=w-316
+    love.graphics.push("all")
     self:drawToolbar(app,w,h,right)
-    local x=right+20
-    self:button(x,75,113,40,"Pincel",function() self.tab="brush" end,
-        self.tab=="brush" and "primary" or nil)
-    self:button(x+124,75,116,40,"Camadas",function() self.tab="layers" end,
-        self.tab=="layers" and "primary" or nil)
-    if self.tab=="brush" then self:drawBrushPanel(app,x,240,h)
-    else self:drawLayersPanel(app,x,240,h) end
-    self:print(app.message or "Pronto",14,h-26,C.white,self.small,math.max(100,w-620))
-    self:print(("%dx%d  |  %d camadas  |  zoom %d%%"):format(
-        app.doc.width,app.doc.height,#app.doc.layers,math.floor(app.zoom*100+0.5)),
-        w-600,h-26,C.muted,self.small,585,"right")
+    local px=right+18
+    self:rect(px,78,280,43,C.top,10)
+    local tabs={{"Pinceis","brush"},{"Ajustes","settings"},
+        {"Camadas","layers"},{"Cor","color"}}
+    for i,t in ipairs(tabs) do
+        local xx=px+4+(i-1)*69
+        if self.tab==t[2] then self:rect(xx,82,67,35,C.surface2,8) end
+        self:print(t[1],xx+1,93,self.tab==t[2] and C.accent or C.muted,
+            self.small,65,"center")
+        self:register(xx,82,67,35,function() self.tab=t[2] end)
+    end
+    self.currentDoc=app.doc
+    if self.tab=="brush" then self:drawBrushPanel(app,px,280,h)
+    elseif self.tab=="settings" then self:drawSettings(app,px,280,h)
+    elseif self.tab=="layers" then self:drawLayersPanel(app,px,280,h)
+    else self:drawColorPanel(app,px,280,h) end
+    self:drawWorkspaceHeader(app)
+
+    self:print(app.message or "Pronto para criar",18,h-25,C.white,
+        self.small,math.max(100,w-545))
+    local mode=app.tool=="brush" and (Presets.find(app.presetId) or {}).name or app.tool
+    self:print(("%d x %d  |  %s  |  zoom %d%%"):format(
+        app.doc.width,app.doc.height,mode or "",math.floor(app.zoom*100+0.5)),
+        w-505,h-25,C.muted,self.small,486,"right")
     if self.modal then self:drawModal(app) end
     love.graphics.pop()
+end
+
+function UI:mousewheel(x,y)
+    local w=love.graphics.getWidth()
+    if self.tab~="layers" or x<w-316 then return false end
+    local count=#(self.currentDoc and self.currentDoc.layers or {})
+    self.layerScroll=clamp(self.layerScroll-(y>0 and 1 or -1),0,math.max(0,count-1))
+    return true
 end
 
 return UI

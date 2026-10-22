@@ -15,6 +15,9 @@ Reconstruir **funcionalmente o ibisPaint** por engenharia reversa do comportamen
 ## REALIDADE ATUAL (NAO INVENTAR PROGRESSO)
 O repositorio possui um prototipo Lua/LÖVE e **um primeiro motor C++ raster integrado via LuaJIT FFI para pincel/borracha**. O motor C++ ABI v7 acrescenta máscaras de camada e clipping à camada imediatamente inferior, com persistência. Ainda sem pintura direta na máscara nem grupos. O v6 possui Alpha Lock e seleção retangular nos pincéis; o v5 contém compositor RGBA8 (Normal/Multiply/Screen/Add/Overlay), e o v4 suporta máscara personalizada PNG, fluxo básico e opacidade por pressão; mantém as três pontas iniciais, calcula regiões sujas e mantém espaçamento entre eventos; LuaJIT administra um cache LRU limitado de tiles de 128×128. Ainda não há equivalência comprovada de pincel com ibisPaint, pressão nativa do stylus ou filtros nativos. A existencia de um pincel C++ nao cumpre a missao. Nao descreva o Inkora como clone completo ou motor profissional.
 
+## EXPERIENCIA VISUAL E UX (REGRA DA VISAO DO USUARIO)
+O usuario apontou que as versoes antigas quase nao tinham diferenca perceptivel. **Nao voltar a entregar apenas alteracoes invisiveis no motor**: avancar em paralelo na interface e demonstrar funcionalidades reais ao artista. A primeira reformulacao do desktop inclui biblioteca de presets configurando C++, selecionador HSV e miniaturas reais no painel de camadas. Preservar esses fluxos, evitar botoes decorativos. Documentar sempre a diferenca VISIVEL e o teste funcional correspondente.
+
 ## ORDEM DE TRABALHO OBRIGATORIA
 1. Inspecione o codigo existente e consulte **docs/ROADMAP.md**; preserve o que ja funciona.
 2. Faça uma matriz de comportamento do ibisPaint: ferramenta/gesto, resultados, casos extremos e teste comparativo. Identifique o que e **observado** versus **estimado**; nao invente descoberta de engenharia reversa.

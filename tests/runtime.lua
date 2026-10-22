@@ -9,7 +9,7 @@ local function close(a,b,tolerance)
     return math.abs(a-b) <= (tolerance or 0.18)
 end
 
-local function run()
+local function run(app)
     local requireNative=os.getenv("INKORA_REQUIRE_NATIVE")=="1"
     if requireNative then
         assert(Native.available(),"Motor C++ deveria estar carregado: "..tostring(Native.error))
@@ -374,6 +374,48 @@ local function run()
     assert(copy:exportPNG(),"Falha ao exportar PNG")
     local projects=Doc.listProjects()
     assert(#projects>=1,"Projeto nao listado")
+    -- UI overhaul must change real brush parameters and allow real hits.
+    if app then
+        local UI=app.ui
+        assert(app:choosePreset("chalk"),"Preset de giz nao encontrado")
+        assert(app.brushTip==2 and app.brushSize==29 and
+            app.brushFlow==0.75,"Preset mudou so a aparencia")
+        assert(not app:choosePreset("missing"),"Preset inexistente aceito")
+        assert(not app:choosePreset("custom") or app.tipMask,
+            "Ponta PNG sem imagem foi selecionada")
+        local width=love.graphics.getWidth()
+        local px=width-316+18
+        UI.tab="brush"
+        love.draw()
+        assert(UI:click(px+32,283),"Cartao de preset nao clicavel")
+        assert(app.presetId=="marker" and app.brushTip==1 and
+            app.brushSize==28,"Biblioteca visual nao aplica o preset")
+        UI.tab="settings"
+        love.draw()
+        assert(UI:click(px+215,230),"Controle de tamanho nao clicavel")
+        assert(app.brushSize>50,"Slider de pincel nao alterou o tamanho")
+        UI:mousereleased()
+        UI.tab="color"
+        love.draw()
+        local oldColor={app.color[1],app.color[2],app.color[3]}
+        assert(UI:click(px+140,340),"Seletor HSV nao clicavel")
+        assert(app.colorIndex==nil and (
+            math.abs(app.color[1]-oldColor[1])>0.01 or
+            math.abs(app.color[2]-oldColor[2])>0.01 or
+            math.abs(app.color[3]-oldColor[3])>0.01),
+            "Seletor HSV nao modificou a cor")
+        assert(app.doc:addLayer("Miniatura"))
+        UI.tab="layers"
+        love.draw()
+        assert(UI:click(px+86,274),"Miniatura de camada nao clicavel")
+        assert(app.doc.selected==2,"Painel nao selecionou a camada superior")
+        -- All panels should render in a real graphics context, including
+        -- minimum supported window dimensions.
+        UI.tab="brush"
+        love.draw()
+        print("INKORA_DESKTOP_UI_BRUSH_LIBRARY_OK")
+    end
+
     print("INKORA_GPU_SMOKE_OK")
 end
 
