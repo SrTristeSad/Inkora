@@ -14,6 +14,24 @@
 8. [Klecks/layer-compositor.ts](https://github.com/bitbof/klecks/blob/main/src/app/script/klecks/canvas/layer-compositor.ts): composicao em Canvas2D com opacidade, mix mode e grupos.
 9. [LÖVE Data:getFFIPointer](https://love2d.org/wiki/Data:getFFIPointer): ponte segura apenas sob contrato correto de posse e formato; suportada desde LÖVE 11.3.
 
+## Galeria: observacoes oficiais e implementacao atual
+
+Referencias publicas consultadas:
+- [02. Comece a criar uma obra de arte](https://ibispaint.com/lecture/index.jsp?lang=pt&no=03): titulo -> Minha Galeria -> icone de + -> tamanho da tela -> area de pintura. Captura oficial da galeria vazia `chapter_03_02.png`.
+- [20. Ver os seus trabalhos artisticos](https://ibispaint.com/lecture/index.jsp?lang=pt&no=20): miniatura -> visualizacao ampliada -> Editar; exemplos da barra de ferramentas inferior e galeria ocupada.
+- [29. Artworks Folder](https://ibispaint.com/lecture/index.jsp?no=193): grade de trabalhos e dialogo de criacao.
+
+| Comportamento | Evidencia | Inkora agora | Ainda nao reproduz |
+| --- | --- | --- | --- |
+| Cabecalho "Minha Galeria", Voltar e Selecionar | Capturas oficiais citadas | Barra superior grafite e acoes reais | Medicao pixel a pixel de proporcoes/gestos |
+| Galeria vazia clara e botao + inferior | Tutorial 02 | Fundo creme, estado vazio e + funcional | Sincronizacao real |
+| Grade de miniaturas com titulo | Tutorial 20 | Miniaturas PNG reais do projeto, grid rolavel | Pastas, rearranjo manual e indice temporal |
+| Abrir miniatura e depois Editar | Tutorial 20 | Tela de detalhe, Editar entra no editor Lua/C++ | Gestos de flick e metadados de tempo de desenho |
+| Gerenciamento de obras | Acao contextual documentada no ibisPaint | Renomear sem alterar pixels, duplicar, mover para lixeira com confirmacao, restaurar ultimo item | Lixeira de 30 dias, compartilhamento online |
+| Video timelapse | Tutorial 20 | Botao visivelmente desabilitado | Gravacao e replay, ainda nao implementados |
+
+Esta eh engenharia reversa **do comportamento publicamente observavel**. O Inkora nao usa imagens, icones proprietarios ou codigo do ibisPaint e ainda nao teve validacao manual lado a lado com o binario do app.
+
 ## Matriz de equivalencia (ainda **nao** validada visualmente)
 
 | Requisito | Comportamento publicamente documentado | Implementado no Inkora | Teste comparativo pendente |
