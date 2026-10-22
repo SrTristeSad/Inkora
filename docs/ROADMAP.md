@@ -24,7 +24,8 @@
 - [x] Criacao com presets, dimensoes editaveis, orientacao, nome do projeto e preview de proporcao.
 - [x] Teste grafico end-to-end no LÖVE com arquivo reaberto e pincelada persistida; capturas de tres telas no CI.
 - [ ] Comparacao visual e de gestos lado a lado com versao concreta do ibisPaint em hardware Windows / tablet.
-- [ ] Colecoes/pastas, ordenacao configuravel, importacao direta pela galeria, time-lapse, sincronizacao na nuvem e interface de restauracao completa da lixeira (atualmente restaura a ultima obra).
+- [x] Grupos/pastas na galeria: menu + abre Nova pasta e Novo desenho; pastas aninhadas, renomeacao pelo titulo, mover desenhos via selecao ou arrastar, agrupar ao arrastar um desenho sobre outro, navegacao Voltar, lixeira e criacao de obra dentro do grupo. Indice persistente separado do formato INKORA1, testado em Lua e GPU.
+- [ ] Ordenacao manual da galeria, mover varias pastas de uma vez, importacao direta, time-lapse, sincronizacao na nuvem e interface completa da lixeira (atualmente restaura a ultima obra).
 
 ## Ordem de execução
 
