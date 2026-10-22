@@ -963,8 +963,49 @@ function app:importGalleryIPV(file)
         if self.screen=="editor" then self:statusMessage(message) end
         return false
     end
-    local fileName=file:getFilename()
-    local pngName=fileName:gsub("%.[iI][pP][vV]$",".png")
+    local pngName=file:getFilename():gsub("%.[iI][pP][vV]$",".png")
+    local name=pngName:gsub(string.char(92),"/"):
+        match("([^/]+)%.%w+$") or "Imagem IPV"
+    -- First try the independent RPNG decoder. A hidden flattened canvas
+    -- stays in the document for comparison if layer order differs.
+    -- Incomplete/unsupported RPNG data never yields fake editable layers.
+    local layerReason="nenhuma camada RPNG reconhecida"
+    if #content.rasterLayers>0 then
+        local decoded,rasters=pcall(reader.decodeRasterLayers,content)
+        if decoded then
+            local previous=self.doc
+            local created,doc=pcall(Document.fromIPVRasters,
+                content.width,content.height,name,rasters,content.png)
+            if created then
+                local saved,err=pcall(function()
+                    doc:save(name)
+                    if self.startup.galleryFolder~="" then
+                        self.startup.folders:moveProjects({doc.projectKey},
+                            self.startup.galleryFolder)
+                    end
+                end)
+                if saved then
+                    self.doc=doc
+                    self.startup.galleryModal=nil
+                    self.screen="editor"
+                    self.dragging=nil
+                    self.rotation=0
+                    self:fitView()
+                    self:statusMessage(
+                        ("IPV: %d camadas raster editaveis + referencia oculta; ordem estimada."):format(#rasters))
+                    return true
+                end
+                layerReason=tostring(err)
+            else
+                layerReason=tostring(doc)
+            end
+            self.doc=previous
+        else
+            layerReason=tostring(rasters)
+        end
+    end
+    -- Compatible with older IPV files or unsupported layer variants:
+    -- import only the flattened PNG and clearly report the limitation.
     local virtualPNG={
         getFilename=function()return pngName end,
         open=function()end,
@@ -973,8 +1014,8 @@ function app:importGalleryIPV(file)
     }
     local imported=self:importGalleryPNG(virtualPNG)
     if imported then
-        self:statusMessage(
-            "IPV importado como imagem composta. Camadas e textos originais nao sao editaveis.")
+        self:statusMessage("IPV: apenas imagem composta importada ("..
+            layerReason..").")
     end
     return imported
 end
