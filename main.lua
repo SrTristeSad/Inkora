@@ -1008,36 +1008,36 @@ function app:importGalleryIPV(file)
                 local previous=self.doc
                 local created,doc=pcall(Document.fromIPVRasters,
                     content.width,content.height,name,rasters,content.png)
-            if created then
-                local saved,err=pcall(function()
-                    doc:save(name)
-                    if self.startup.galleryFolder~="" then
-                        self.startup.folders:moveProjects({doc.projectKey},
-                            self.startup.galleryFolder)
+                if created then
+                    local saved,err=pcall(function()
+                        doc:save(name)
+                        if self.startup.galleryFolder~="" then
+                            self.startup.folders:moveProjects({doc.projectKey},
+                                self.startup.galleryFolder)
+                        end
+                    end)
+                    if saved then
+                        self.doc=doc
+                        self.startup.galleryModal=nil
+                        self.screen="editor"
+                        self.dragging=nil
+                        self.rotation=0
+                        self:fitView()
+                        local orderMessage=content.layerOrderSource=="layer-list"
+                            and "ordem lida de registro IPV (validacao real pendente)"
+                            or "ordem estimada por ID"
+                        local checkMessage=report.direction=="reverse"
+                            and "pilha invertida para corresponder ao PNG"
+                            or "pixels comparados ao PNG"
+                        self:statusMessage(
+                            ("IPV: %d camadas raster editaveis; %s; %s (%d amostras)."):format(
+                                #rasters,orderMessage,checkMessage,report.checked))
+                        return true
                     end
-                end)
-                if saved then
-                    self.doc=doc
-                    self.startup.galleryModal=nil
-                    self.screen="editor"
-                    self.dragging=nil
-                    self.rotation=0
-                    self:fitView()
-                    local orderMessage=content.layerOrderSource=="layer-list"
-                        and "ordem lida de registro IPV (validacao real pendente)"
-                        or "ordem estimada por ID"
-                    local checkMessage=report.direction=="reverse"
-                        and "pilha invertida para corresponder ao PNG"
-                        or "pixels comparados ao PNG"
-                    self:statusMessage(
-                        ("IPV: %d camadas raster editaveis; %s; %s (%d amostras)."):format(
-                            #rasters,orderMessage,checkMessage,report.checked))
-                    return true
+                    layerReason=tostring(err)
+                else
+                    layerReason=tostring(doc)
                 end
-                layerReason=tostring(err)
-            else
-                layerReason=tostring(doc)
-            end
                 self.doc=previous
             end
         else
