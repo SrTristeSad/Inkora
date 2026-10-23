@@ -89,7 +89,8 @@ local function evaluate(rasters,flat,points,reversed)
         informative=opaqueOrVisible,
         maxError=maxError,
         meanError=totalError/(math.max(1,observed)*4),
-        matches=maxError<=tolerance,
+        -- A blank sampled region does not prove that sparse layers match.
+        matches=maxError<=tolerance and opaqueOrVisible>0,
     }
 end
 
