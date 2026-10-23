@@ -1692,7 +1692,45 @@ local function run(app)
         "Registro de ordem desconhecido deveria preservar fallback")
     print("INKORA_IPV_LAYER_LIST_ORDER_AND_DELETION_SYNTHETIC_OK")
 
-    local rpngBytes=head..raster..snap
+    -- The flattened snapshot must match the RPNG sample when normal-alpha
+    -- layers are imported. The old synthetic 'snap' had unrelated pixels.
+    local compositePixels=love.image.newImageData(64,64,"rgba8")
+    compositePixels:setPixel(10,42,0,1,0,1)
+    compositePixels:setPixel(11,42,0,0,1,1)
+    compositePixels:setPixel(10,43,1,0,0,1)
+    local compositePNG=compositePixels:encode("png"):getString()
+    local matchedSnap=record(0x100,0x500,
+        string.rep("\0",8)..be32(0xffffffff)..be32(0)..
+        be16(0)..be32(#compositePNG)..compositePNG)
+
+    local visual=require("src.ipv_visual_verify")
+    local pixelRed=love.image.newImageData(1,1,"rgba8")
+    pixelRed:setPixel(0,0,1,0,0,1)
+    local pixelBlue=love.image.newImageData(1,1,"rgba8")
+    pixelBlue:setPixel(0,0,0,0,1,1)
+    local referenceBlue=love.image.newImageData(2,2,"rgba8")
+    referenceBlue:setPixel(0,0,0,0,1,1)
+    local overlapping={
+        {id=1,imageData=pixelRed,x=0,y=0},
+        {id=2,imageData=pixelBlue,x=0,y=0},
+    }
+    local normalResult=visual.assess(overlapping,referenceBlue)
+    assert(normalResult.matches and normalResult.direction=="normal" and
+        normalResult.checked==4 and normalResult.informative==1,
+        "Composicao normal deveria coincidir com a referencia azul")
+    local referenceRed=love.image.newImageData(2,2,"rgba8")
+    referenceRed:setPixel(0,0,1,0,0,1)
+    local reverseResult=visual.assess(overlapping,referenceRed)
+    assert(reverseResult.matches and reverseResult.direction=="reverse",
+        "Inversao somente deve ocorrer quando a ordem oposta bate com PNG")
+    local referenceGreen=love.image.newImageData(2,2,"rgba8")
+    referenceGreen:setPixel(0,0,0,1,0,1)
+    local mismatch=visual.assess(overlapping,referenceGreen)
+    assert(not mismatch.matches and mismatch.status=="mismatch",
+        "Blend ou camadas invalidas devem ser detectados")
+    print("INKORA_IPV_VISUAL_NORMAL_REVERSE_MISMATCH_GPU_OK")
+
+    local rpngBytes=head..raster..matchedSnap
     local rasterIPV={
         getFilename=function()return "C:"..string.char(92).."camadas.ipv" end,
         getSize=function()return #rpngBytes end,
@@ -1732,13 +1770,28 @@ local function run(app)
     assert(greenValue>0.9,"Camada raster nao sobreviveu ao salvamento")
     print("INKORA_IPV_SPARSE_RPNG_BOTTOM_UP_IMPORT_GPU_OK")
 
+    -- Deliberately inconsistent flattened PNG must import ONLY that PNG,
+    -- not silently expose pixels that ibisPaint did not render.
+    local mismatchedBytes=head..raster..snap
+    local mismatchedIPV={
+        getFilename=rasterIPV.getFilename,
+        getSize=function()return #mismatchedBytes end,
+        open=function()end,read=function()return mismatchedBytes end,
+        close=function()end,
+    }
+    assert(app:importGalleryIPV(mismatchedIPV))
+    assert(#app.doc.layers==2 and app.doc.layers[1].visible,
+        "IPV visualmente divergente deveria abrir so PNG achatado")
+    assert(app:returnToGallery())
+    print("INKORA_IPV_VISUAL_MISMATCH_SAFE_FALLBACK_GPU_OK")
+
     -- An invalid span table must not become a fake raster layer. It is
     -- acceptable to fall back to the proven flattened composite instead.
     local broken=rpng:sub(1,58)..be16(6)..rpng:sub(61)
     local badRaster=record(0x100,0x500,
         string.rep("\0",8)..be32(7)..be32(1)..
         be16(0)..be32(#broken)..broken)
-    local fallbackBytes=head..badRaster..snap
+    local fallbackBytes=head..badRaster..matchedSnap
     local fallbackIPV={
         getFilename=rasterIPV.getFilename,
         getSize=function()return #fallbackBytes end,
