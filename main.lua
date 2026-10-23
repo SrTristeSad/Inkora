@@ -982,9 +982,32 @@ function app:importGalleryIPV(file)
     if #content.rasterLayers>0 then
         local decoded,rasters=pcall(reader.decodeRasterLayers,content)
         if decoded then
-            local previous=self.doc
-            local created,doc=pcall(Document.fromIPVRasters,
-                content.width,content.height,name,rasters,content.png)
+            -- Ensure the editable Normal layers actually reproduce the PNG
+            -- exported by ibisPaint. Unsupported blend/visibility/opacities
+            -- must never silently be presented as a faithful import.
+            local checked,report=pcall(function()
+                local reference=love.image.newImageData(
+                    love.filesystem.newFileData(content.png,"ipv-check.png"))
+                return require("src.ipv_visual_verify").assess(rasters,reference)
+            end)
+            if not checked or not report.matches then
+                if checked then
+                    layerReason=("raster diverge da imagem final (erro maximo %.3f)"):format(
+                        report.maxError)
+                else
+                    layerReason="nao foi possivel verificar pixels: "..tostring(report)
+                end
+            else
+                if report.direction=="reverse" then
+                    local reversed={}
+                    for i=#rasters,1,-1 do
+                        reversed[#reversed+1]=rasters[i]
+                    end
+                    rasters=reversed
+                end
+                local previous=self.doc
+                local created,doc=pcall(Document.fromIPVRasters,
+                    content.width,content.height,name,rasters,content.png)
             if created then
                 local saved,err=pcall(function()
                     doc:save(name)
@@ -1003,16 +1026,20 @@ function app:importGalleryIPV(file)
                     local orderMessage=content.layerOrderSource=="layer-list"
                         and "ordem lida de registro IPV (validacao real pendente)"
                         or "ordem estimada por ID"
+                    local checkMessage=report.direction=="reverse"
+                        and "pilha invertida para corresponder ao PNG"
+                        or "pixels comparados ao PNG"
                     self:statusMessage(
-                        ("IPV: %d camadas raster editaveis + referencia oculta; %s."):format(
-                            #rasters,orderMessage))
+                        ("IPV: %d camadas raster editaveis; %s; %s (%d amostras)."):format(
+                            #rasters,orderMessage,checkMessage,report.checked))
                     return true
                 end
                 layerReason=tostring(err)
             else
                 layerReason=tostring(doc)
             end
-            self.doc=previous
+                self.doc=previous
+            end
         else
             layerReason=tostring(rasters)
         end
